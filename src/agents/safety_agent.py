@@ -64,8 +64,8 @@ class SafetyAgent(BaseAgent):
         try:
             response_content = result["content"].strip()
 
-            # Логируем сырой ответ для отладки
-            logger.debug(f"Safety Agent raw response: {response_content[:200]}...")
+            # Логируем сырой ответ для отладки (увеличен размер до 1000 символов)
+            logger.debug(f"Safety Agent raw response: {response_content[:1000]}...")
 
             # Пытаемся извлечь JSON из markdown блоков (```json ... ```)
             if "```json" in response_content:
@@ -79,6 +79,14 @@ class SafetyAgent(BaseAgent):
                 end = response_content.find("```", start)
                 if end != -1:
                     response_content = response_content[start:end].strip()
+
+            # Дополнительная очистка: ищем первую { и последнюю }
+            # Это помогает избавиться от текста до и после JSON
+            first_brace = response_content.find('{')
+            last_brace = response_content.rfind('}')
+
+            if first_brace != -1 and last_brace != -1 and last_brace > first_brace:
+                response_content = response_content[first_brace:last_brace + 1]
 
             safety_data = json.loads(response_content)
 
@@ -101,7 +109,7 @@ class SafetyAgent(BaseAgent):
 
         except json.JSONDecodeError as e:
             logger.error(f"❌ Не удалось распарсить JSON ответ от Safety Agent: {e}")
-            logger.error(f"Raw response: {result['content'][:500]}...")
+            logger.error(f"Raw response: {result['content'][:1000]}...")
 
             # Fallback: базовая проверка
             return {
@@ -114,7 +122,6 @@ class SafetyAgent(BaseAgent):
             }
         except KeyError as e:
             logger.error(f"❌ Отсутствует ключ в ответе Safety Agent: {e}")
-            logger.error(f"Response data: {safety_data}")
 
             # Fallback
             return {

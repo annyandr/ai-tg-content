@@ -548,26 +548,6 @@ async def show_my_posts(callback: CallbackQuery):
 
 
 # ====================================================================================
-# СТАТИСТИКА
-# ====================================================================================
-
-@router.callback_query(F.data == "stats")
-async def show_stats(callback: CallbackQuery):
-    """Статистика"""
-    
-    stats = telegram_bot.get_stats()
-    
-    await callback.message.edit_text(
-        f"📊 <b>Статистика</b>\n\n"
-        f"✅ Опубликовано: {stats.get('completed', 0)}\n"
-        f"⏰ В очереди: {stats.get('active_tasks', 0)}\n"
-        f"❌ Ошибок: {stats.get('failed', 0)}",
-        parse_mode="HTML"
-    )
-    await callback.answer()
-
-
-# ====================================================================================
 # ОТМЕНА
 # ====================================================================================
 
@@ -672,21 +652,43 @@ async def cmd_queue(message: Message):
 @router.message(Command("stats"))
 async def cmd_stats(message: Message):
     """Команда /stats - статистика"""
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="📊 Статистика", callback_data="stats")],
-        [InlineKeyboardButton(text="◀️ Главное меню", callback_data="back_to_menu")]
-    ])
+    if not telegram_bot:
+        await message.answer("❌ Бот не инициализирован", parse_mode="HTML")
+        return
 
-    await message.answer(
-        "📊 <b>Статистика бота</b>\n\n"
-        "• Всего постов: 0\n"
-        "• Запланировано: 0\n"
-        "• Опубликовано: 0\n"
-        "• Ошибок: 0\n\n"
-        "Функция в разработке.",
-        parse_mode="HTML",
-        reply_markup=keyboard
-    )
+    try:
+        stats = telegram_bot.get_stats()
+
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="🔄 Обновить", callback_data="stats")],
+            [InlineKeyboardButton(text="◀️ Главное меню", callback_data="back_to_menu")]
+        ])
+
+        stats_text = f"""📊 <b>Статистика бота</b>
+
+📬 <b>Очередь:</b>
+• Ожидают: {stats['pending']}
+• Запланировано: {stats['scheduled']}
+
+✅ <b>Выполнено:</b> {stats['completed']}
+❌ <b>Ошибок:</b> {stats['failed']}
+
+📈 <b>Success Rate:</b> {stats['success_rate']}%
+📊 <b>Всего опубликовано:</b> {stats['total_published']}
+"""
+
+        await message.answer(
+            stats_text,
+            parse_mode="HTML",
+            reply_markup=keyboard
+        )
+
+    except Exception as e:
+        logger.error(f"Ошибка в /stats: {e}")
+        await message.answer(
+            f"❌ <b>Ошибка получения статистики</b>\n\n<code>{str(e)}</code>",
+            parse_mode="HTML"
+        )
 
 
 @router.message(Command("scheduler"))
@@ -731,21 +733,42 @@ async def handle_view_queue(callback: CallbackQuery):
 @router.callback_query(F.data == "stats")
 async def handle_view_stats(callback: CallbackQuery):
     """Обработка кнопки 'Статистика'"""
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="📋 Мои посты", callback_data="my_posts")],
-        [InlineKeyboardButton(text="◀️ Главное меню", callback_data="back_to_menu")]
-    ])
+    if not telegram_bot:
+        await callback.answer("❌ Бот не инициализирован", show_alert=True)
+        return
 
-    await callback.message.edit_text(
-        "📊 <b>Статистика</b>\n\n"
-        "• Всего постов: 0\n"
-        "• Опубликовано: 0\n"
-        "• В очереди: 0\n\n"
-        "Функция в разработке.",
-        parse_mode="HTML",
-        reply_markup=keyboard
-    )
-    await callback.answer()
+    try:
+        stats = telegram_bot.get_stats()
+
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="📋 Мои посты", callback_data="my_posts")],
+            [InlineKeyboardButton(text="🔄 Обновить", callback_data="stats")],
+            [InlineKeyboardButton(text="◀️ Главное меню", callback_data="back_to_menu")]
+        ])
+
+        stats_text = f"""📊 <b>Статистика бота</b>
+
+📬 <b>Очередь:</b>
+• Ожидают: {stats['pending']}
+• Запланировано: {stats['scheduled']}
+
+✅ <b>Выполнено:</b> {stats['completed']}
+❌ <b>Ошибок:</b> {stats['failed']}
+
+📈 <b>Success Rate:</b> {stats['success_rate']}%
+📊 <b>Всего опубликовано:</b> {stats['total_published']}
+"""
+
+        await callback.message.edit_text(
+            stats_text,
+            parse_mode="HTML",
+            reply_markup=keyboard
+        )
+        await callback.answer()
+
+    except Exception as e:
+        logger.error(f"Ошибка в handle_view_stats: {e}")
+        await callback.answer(f"❌ Ошибка получения статистики", show_alert=True)
 
 
 @router.callback_query(F.data == "scheduler")
@@ -787,10 +810,10 @@ async def handle_back_to_menu(callback: CallbackQuery):
 @router.callback_query(F.data == "refresh_queue")
 async def handle_refresh_queue(callback: CallbackQuery):
     """Обновление очереди публикаций"""
-    await callback.answer("🔄 Обновляю...")
+    from aiogram.exceptions import TelegramBadRequest
 
     if not telegram_bot:
-        await callback.message.edit_text("❌ Бот не инициализирован", parse_mode="HTML")
+        await callback.answer("❌ Бот не инициализирован", show_alert=True)
         return
 
     try:
@@ -854,12 +877,19 @@ async def handle_refresh_queue(callback: CallbackQuery):
             reply_markup=keyboard
         )
 
+        await callback.answer("✅ Обновлено")
+
+    except TelegramBadRequest as e:
+        # Обрабатываем случай когда сообщение не изменилось
+        if "message is not modified" in str(e).lower():
+            await callback.answer("✅ Очередь актуальна", show_alert=False)
+        else:
+            logger.error(f"Telegram error в refresh_queue: {e}")
+            await callback.answer(f"❌ Ошибка: {str(e)}", show_alert=True)
+
     except Exception as e:
         logger.error(f"Ошибка в refresh_queue: {e}")
-        await callback.message.edit_text(
-            f"❌ <b>Ошибка обновления очереди</b>\n\n<code>{str(e)}</code>",
-            parse_mode="HTML"
-        )
+        await callback.answer(f"❌ Ошибка обновления", show_alert=True)
 
 
 @router.callback_query(F.data == "cancel")
