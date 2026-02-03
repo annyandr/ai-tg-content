@@ -18,6 +18,7 @@ from src.services.validator import PostValidator, logger
 from src.telegram_bot.handlers.admin import cmd_stats
 from src.telegram_bot.models import PublishTask, TaskStatus
 from src.utils.formatters import format_for_channel
+from src.utils.channel_utils import normalize_channel_id, get_channel_display_name
 
 router = Router()
 
@@ -299,7 +300,7 @@ async def publish_immediately(callback: CallbackQuery, state: FSMContext):
         
         task = PublishTask(
             task_id=task_id,
-            channel_id=f"@{data['channel']}" if data['channel'].isalpha() else data['channel'],
+            channel_id=normalize_channel_id(data['channel']),
             text=data['post_content'],
             scheduled_time=datetime.now(),
             status=TaskStatus.PENDING
@@ -310,7 +311,7 @@ async def publish_immediately(callback: CallbackQuery, state: FSMContext):
         
         await callback.message.edit_text(
             f"✅ <b>Пост опубликован!</b>\n\n"
-            f"📢 <b>Канал:</b> @{data['channel']}\n"
+            f"📢 <b>Канал:</b> {get_channel_display_name(data['channel'], data.get('name'))}\n"
             f"🆔 <b>ID задачи:</b> <code>{task_id}</code>\n"
             f"⏰ <b>Время:</b> {datetime.now().strftime('%d.%m.%Y %H:%M')}\n\n"
             f"Пост отправлен в канал. Проверьте результат!",
@@ -400,21 +401,21 @@ async def process_scheduled_time(callback: CallbackQuery, state: FSMContext):
     try:
         # Создаём задачу
         task_id = str(uuid.uuid4())[:8]
-        
+
         task = PublishTask(
             task_id=task_id,
-            channel_id=f"@{data['channel']}" if data['channel'].isalpha() else data['channel'],
+            channel_id=normalize_channel_id(data['channel']),
             text=data['post_content'],
             scheduled_time=scheduled_time,
             status=TaskStatus.SCHEDULED
         )
-        
+
         # Добавляем в очередь
         await telegram_bot.add_task(task)
-        
+
         await callback.message.edit_text(
             f"⏰ <b>Пост запланирован!</b>\n\n"
-            f"📢 <b>Канал:</b> @{data['channel']}\n"
+            f"📢 <b>Канал:</b> {get_channel_display_name(data['channel'], data.get('name'))}\n"
             f"🆔 <b>ID задачи:</b> <code>{task_id}</code>\n"
             f"📅 <b>Время публикации:</b> {scheduled_time.strftime('%d.%m.%Y %H:%M')}\n\n"
             f"Пост будет автоматически опубликован в указанное время.",
@@ -454,20 +455,20 @@ async def process_custom_time(message: Message, state: FSMContext):
         
         # Создаём задачу
         task_id = str(uuid.uuid4())[:8]
-        
+
         task = PublishTask(
             task_id=task_id,
-            channel_id=f"@{data['channel']}" if data['channel'].isalpha() else data['channel'],
+            channel_id=normalize_channel_id(data['channel']),
             text=data['post_content'],
             scheduled_time=scheduled_time,
             status=TaskStatus.SCHEDULED
         )
-        
+
         await telegram_bot.add_task(task)
-        
+
         await message.answer(
             f"⏰ <b>Пост запланирован!</b>\n\n"
-            f"📢 <b>Канал:</b> @{data['channel']}\n"
+            f"📢 <b>Канал:</b> {get_channel_display_name(data['channel'], data.get('name'))}\n"
             f"🆔 <b>ID задачи:</b> <code>{task_id}</code>\n"
             f"📅 <b>Время публикации:</b> {scheduled_time.strftime('%d.%m.%Y %H:%M')}\n\n"
             f"Пост будет автоматически опубликован в указанное время.",
