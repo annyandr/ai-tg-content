@@ -299,7 +299,7 @@ async def publish_immediately(callback: CallbackQuery, state: FSMContext):
         
         task = PublishTask(
             task_id=task_id,
-            channel_id=f"@{data['channel']}",
+            channel_id=f"@{data['channel']}" if data['channel'].isalpha() else data['channel'],
             text=data['post_content'],
             scheduled_time=datetime.now(),
             status=TaskStatus.PENDING
@@ -403,7 +403,7 @@ async def process_scheduled_time(callback: CallbackQuery, state: FSMContext):
         
         task = PublishTask(
             task_id=task_id,
-            channel_id=f"@{data['channel']}",
+            channel_id=f"@{data['channel']}" if data['channel'].isalpha() else data['channel'],
             text=data['post_content'],
             scheduled_time=scheduled_time,
             status=TaskStatus.SCHEDULED
@@ -457,7 +457,7 @@ async def process_custom_time(message: Message, state: FSMContext):
         
         task = PublishTask(
             task_id=task_id,
-            channel_id=f"@{data['channel']}",
+            channel_id=f"@{data['channel']}" if data['channel'].isalpha() else data['channel'],
             text=data['post_content'],
             scheduled_time=scheduled_time,
             status=TaskStatus.SCHEDULED

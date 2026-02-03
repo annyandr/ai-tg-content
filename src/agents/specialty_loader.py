@@ -18,7 +18,7 @@ SPECIALTY_MAP: Dict[str, Dict] = {
     "гинекология": {
         "prompt": GYNECOLOGY_SPECIALTY_PROMPT,
         "emoji": "🍑",
-        "channel": "profgynecologist",
+        "channel": "-1003748097480",
         "link": "https://t.me/profgynecologist",
         "name": "Гинекология",
         "channel_key": "gynecology"
@@ -26,7 +26,7 @@ SPECIALTY_MAP: Dict[str, Dict] = {
     "педиатрия": {
         "prompt": PEDIATRICS_SPECIALTY_PROMPT,
         "emoji": "👶",
-        "channel": "profpediatrician",
+        "channel": "-1003711554131",
         "link": "https://t.me/profpediatrician",
         "name": "Педиатрия",
         "channel_key": "pediatrics"
