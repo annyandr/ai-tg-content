@@ -1,32 +1,47 @@
-# Генерация ID
-generate_id(prefix="post", length=8)  # "post_a3f9c2d1"
+import uuid
+import hashlib
+import json
+import asyncio
+import logging
+import os
+from functools import wraps
 
-# Хеширование контента
-hash_content(content)  # MD5 для проверки дубликатов
+logger = logging.getLogger(__name__)
 
-# Декоратор повторных попыток
-@retry_async(max_attempts=3, delay=1.0)
-async def my_function():
-    pass
+def generate_id() -> str:
+    """Генерирует уникальный ID."""
+    return str(uuid.uuid4())
 
-# Парсинг времени
-parse_time_string("09:00")  # → datetime
-parse_time_string("2026-02-03 09:00:00")
+def hash_content(content: str) -> str:
+    """Создает хеш контента для проверки дубликатов."""
+    return hashlib.md5(content.encode('utf-8')).hexdigest()
 
-# Вычисление следующего времени публикации
-calculate_next_posting_time(base_time, slot="morning")  # 09:00
-calculate_next_posting_time(base_time, slot="evening")  # 20:00
+def load_json_file(filepath: str):
+    """Загружает данные из JSON файла."""
+    if not os.path.exists(filepath):
+        logger.error(f"File not found: {filepath}")
+        return []
+    try:
+        with open(filepath, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except Exception as e:
+        logger.error(f"Error loading JSON {filepath}: {e}")
+        return []
 
-# Безопасное получение из словаря
-safe_get(data, "user", "profile", "name", default="Unknown")
-
-# Работа с JSON
-load_json_file("config.json", default={})
-save_json_file("data.json", data)
-
-# Разбиение на чанки
-list(chunks([1,2,3,4,5], size=2))  # [[1,2], [3,4], [5]]
-
-# Замер времени
-with Timer("Generation"):
-    await generate_post()  # Автоматически выведет время
+def retry_async(retries=3, delay=2):
+    """Декоратор для повторных попыток выполнения асинхронной функции."""
+    def decorator(func):
+        @wraps(func)
+        async def wrapper(*args, **kwargs):
+            last_exception = None
+            for attempt in range(retries):
+                try:
+                    return await func(*args, **kwargs)
+                except Exception as e:
+                    last_exception = e
+                    logger.warning(f"Attempt {attempt + 1}/{retries} failed for {func.__name__}: {e}")
+                    await asyncio.sleep(delay)
+            logger.error(f"All {retries} attempts failed for {func.__name__}")
+            raise last_exception
+        return wrapper
+    return decorator

@@ -2,7 +2,6 @@
 Агент генерации медицинского контента
 """
 
-import json
 from typing import Dict, Any
 
 from src.agents.base_agent import BaseAgent

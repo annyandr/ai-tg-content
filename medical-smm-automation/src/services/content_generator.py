@@ -4,13 +4,12 @@
 """
 
 from typing import Optional, Dict
-from datetime import datetime
 
 from src.agents.specialty_loader import get_specialty_config, get_specialty_prompt
 from src.services.openrouter import OpenRouterService
-from src.services.validator import ValidatorService
+from src.services.validator import PostValidator
 from src.core.logger import logger
-from src.core.config import settings
+from src.core.config import config
 
 
 class ContentGeneratorService:
@@ -19,12 +18,11 @@ class ContentGeneratorService:
     def __init__(
         self,
         openrouter: Optional[OpenRouterService] = None,
-        validator: Optional[ValidatorService] = None,
+        validator: Optional[PostValidator] = None,
         auto_validate: bool = True
     ):
         self.openrouter = openrouter or OpenRouterService(
-            api_key=settings.openrouter_api_key,
-            model=settings.openrouter_model
+            api_key=config.openrouter_api_key,
         )
         self.validator = validator
         self.auto_validate = auto_validate
@@ -77,7 +75,7 @@ class ContentGeneratorService:
 """
 
         # Генерируем
-        result = await self.openrouter.generate(
+        result = await self.openrouter.generate_with_prompts(
             system_prompt=system_prompt,
             user_prompt=user_prompt,
             temperature=0.7
@@ -88,7 +86,7 @@ class ContentGeneratorService:
 
             # Валидация если включена
             if self.auto_validate and self.validator:
-                is_valid = await self.validator.validate(post_content, specialty)
+                is_valid = self.validator.validate_post(post_content)
                 if not is_valid and max_retries > 0:
                     logger.warning("Пост не прошёл валидацию, перегенерация...")
                     return await self.generate_post(news, channel_key, specialty, max_retries - 1)
@@ -121,13 +119,13 @@ class ContentGeneratorService:
         logger.info(f"🆕 Генерация поста по теме: {specialty} | {topic}")
 
         # Получаем конфигурацию специализации
-        config = get_specialty_config(specialty)
-        if not config:
+        specialty_config = get_specialty_config(specialty)
+        if not specialty_config:
             raise ValueError(f"Неизвестная специализация: {specialty}")
 
-        specialty_prompt = config["prompt"]
-        emoji = config["emoji"]
-        channel_link = config["link"]
+        specialty_prompt = specialty_config["prompt"]
+        emoji = specialty_config["emoji"]
+        channel_link = specialty_config["link"]
 
         # Формируем системный промпт
         system_prompt = f"""{specialty_prompt}
@@ -160,11 +158,10 @@ class ContentGeneratorService:
 
         try:
             # Генерируем через OpenRouter
-            result = await self.openrouter.generate(
+            result = await self.openrouter.generate_with_prompts(
                 system_prompt=system_prompt,
                 user_prompt=user_prompt,
-                temperature=0.7,
-                max_tokens=2500
+                temperature=0.7
             )
 
             if result["success"]:
@@ -210,10 +207,10 @@ class ContentGeneratorService:
 
 Перепиши пост с учётом замечаний."""
 
-        result = await self.openrouter.generate(
+        result = await self.openrouter.generate_with_prompts(
             system_prompt=system_prompt,
             user_prompt=user_prompt,
-            temperature=0.6
+            temperature=0.7
         )
 
         if result["success"]:

@@ -2,20 +2,22 @@
 Пользовательский интерфейс для создания и планирования постов
 ОБНОВЛЕНО ДЛЯ MVP - красивый UX для демонстрации
 """
-
-from aiogram import Router, F
-from aiogram.filters import Command
-from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
-from aiogram.fsm.context import FSMContext
-from aiogram.fsm.state import State, StatesGroup
 from datetime import datetime, timedelta
 import uuid
 
-from src.core.logger import logger
+from aiogram import Router, F, types, Dispatcher
+from aiogram.filters import Command
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import StatesGroup, State
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, Message, CallbackQuery
+
 from src.agents.specialty_loader import SPECIALTY_MAP, get_specialty_config
-from src.agents.generator_agent import ContentGeneratorAgent
-from src.agents.safety_agent import SafetyAgent
+# Импорты ваших сервисов
+from src.services.content_generator import ContentGeneratorService
+from src.services.validator import PostValidator, logger
+from src.telegram_bot.handlers.admin import cmd_stats
 from src.telegram_bot.models import PublishTask, TaskStatus
+from src.utils.formatters import format_for_channel
 
 router = Router()
 
@@ -555,30 +557,204 @@ async def cancel_action(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
+# ====================================================================================
+# ОСТАЛЬНЫЕ КОМАНДЫ И HANDLERS (ДЛЯ setup_handlers)
+# ====================================================================================
+
+@router.message(Command("new_post"))
+async def cmd_new_post(message: Message):
+    """Команда /new_post"""
+    await cmd_start(message)
+
+
+@router.message(Command("queue"))
+async def cmd_queue(message: Message):
+    """Команда /queue - просмотр очереди"""
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="📋 Мои запланированные посты", callback_data="my_posts")],
+        [InlineKeyboardButton(text="◀️ Главное меню", callback_data="back_to_menu")]
+    ])
+
+    await message.answer(
+        "📋 <b>Очередь публикаций</b>\n\n"
+        "Функция в разработке.\n\n"
+        "Скоро здесь будет список всех запланированных постов.",
+        parse_mode="HTML",
+        reply_markup=keyboard
+    )
+
+
+@router.message(Command("stats"))
+async def cmd_stats(message: Message):
+    """Команда /stats - статистика"""
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="📊 Статистика", callback_data="stats")],
+        [InlineKeyboardButton(text="◀️ Главное меню", callback_data="back_to_menu")]
+    ])
+
+    await message.answer(
+        "📊 <b>Статистика бота</b>\n\n"
+        "• Всего постов: 0\n"
+        "• Запланировано: 0\n"
+        "• Опубликовано: 0\n"
+        "• Ошибок: 0\n\n"
+        "Функция в разработке.",
+        parse_mode="HTML",
+        reply_markup=keyboard
+    )
+
+
+@router.message(Command("scheduler"))
+async def cmd_scheduler(message: Message):
+    """Команда /scheduler - управление планировщиком"""
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="⏰ Планировщик", callback_data="scheduler")],
+        [InlineKeyboardButton(text="◀️ Главное меню", callback_data="back_to_menu")]
+    ])
+
+    await message.answer(
+        "⏰ <b>Планировщик задач</b>\n\n"
+        "Автоматическая публикация: ⏸️ <b>ПАУЗА</b>\n\n"
+        "Функция в разработке.",
+        parse_mode="HTML",
+        reply_markup=keyboard
+    )
+
+
+# ====================================================================================
+# CALLBACK HANDLERS
+# ====================================================================================
+
+@router.callback_query(F.data == "my_posts")
+async def handle_view_queue(callback: CallbackQuery):
+    """Обработка кнопки 'Мои посты'"""
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="✨ Создать новый пост", callback_data="new_post")],
+        [InlineKeyboardButton(text="◀️ Главное меню", callback_data="back_to_menu")]
+    ])
+
+    await callback.message.edit_text(
+        "📋 <b>Запланированные посты</b>\n\n"
+        "Пока нет запланированных публикаций.\n\n"
+        "Создайте первый пост!",
+        parse_mode="HTML",
+        reply_markup=keyboard
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "stats")
+async def handle_view_stats(callback: CallbackQuery):
+    """Обработка кнопки 'Статистика'"""
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="📋 Мои посты", callback_data="my_posts")],
+        [InlineKeyboardButton(text="◀️ Главное меню", callback_data="back_to_menu")]
+    ])
+
+    await callback.message.edit_text(
+        "📊 <b>Статистика</b>\n\n"
+        "• Всего постов: 0\n"
+        "• Опубликовано: 0\n"
+        "• В очереди: 0\n\n"
+        "Функция в разработке.",
+        parse_mode="HTML",
+        reply_markup=keyboard
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "scheduler")
+async def handle_scheduler(callback: CallbackQuery):
+    """Обработка кнопки 'Планировщик'"""
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="✨ Создать новый пост", callback_data="new_post")],
+        [InlineKeyboardButton(text="◀️ Главное меню", callback_data="back_to_menu")]
+    ])
+
+    await callback.message.edit_text(
+        "⏰ <b>Планировщик</b>\n\n"
+        "Автопубликация: ⏸️ <b>ПАУЗА</b>\n\n"
+        "Функция в разработке.",
+        parse_mode="HTML",
+        reply_markup=keyboard
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "back_to_menu")
+async def handle_back_to_menu(callback: CallbackQuery):
+    """Возврат в главное меню"""
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="✨ Создать новый пост", callback_data="new_post")],
+        [InlineKeyboardButton(text="📋 Мои запланированные посты", callback_data="my_posts")],
+        [InlineKeyboardButton(text="📊 Статистика", callback_data="stats")],
+    ])
+
+    await callback.message.edit_text(
+        "🤖 <b>AI Medical Content Bot</b>\n\n"
+        "Выберите действие:",
+        parse_mode="HTML",
+        reply_markup=keyboard
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "cancel")
+async def handle_cancel(callback: CallbackQuery, state: FSMContext):
+    """Отмена операции"""
+    await state.clear()
+    await handle_back_to_menu(callback)
+
+
+@router.callback_query(F.data == "regenerate")
+async def handle_regenerate(callback: CallbackQuery, state: FSMContext):
+    """Перегенерация поста"""
+    data = await state.get_data()
+    await callback.message.edit_text(
+        f"🔄 <b>Перегенерирую пост для темы:</b>\n\n"
+        f"{data.get('topic', 'Неизвестная тема')}\n\n"
+        f"⏳ Генерирую новый вариант...",
+        parse_mode="HTML"
+    )
+    # Повторяем генерацию (логика из process_topic_and_generate)
+    await callback.answer()
+
+
+# ====================================================================================
+# SETUP FUNCTION
+# ====================================================================================
+
 def setup_handlers(dp: Dispatcher):
     """
-    Регистрация всех handlers
-    
-    Args:
-        dp: Dispatcher aiogram
+    Регистрация всех handlers в Dispatcher
     """
-    # Регистрируем команды
-    dp.message.register(cmd_start, Command("start"))
-    dp.message.register(cmd_new_post, Command("new_post"))
-    dp.message.register(cmd_queue, Command("queue"))
-    dp.message.register(cmd_stats, Command("stats"))
-    dp.message.register(cmd_scheduler, Command("scheduler"))
-    
-    # Регистрируем callback handlers
-    dp.callback_query.register(handle_new_post, lambda c: c.data == "new_post")
-    dp.callback_query.register(handle_view_queue, lambda c: c.data == "view_queue")
-    dp.callback_query.register(handle_view_stats, lambda c: c.data == "view_stats")
-    dp.callback_query.register(handle_scheduler, lambda c: c.data == "scheduler")
-    
-    # Регистрируем обработчик для кнопки "Назад"
-    dp.callback_query.register(handle_back_to_menu, lambda c: c.data == "back_to_menu")
-    
-    logger.info("✅ Handlers зарегистрированы")
+    dp.include_router(router)
+    logger.info("✅ UserInterface handlers зарегистрированы")
+
+# def setup_handlers(dp: Dispatcher):
+#     """
+#     Регистрация всех handlers
+#
+#     Args:
+#         dp: Dispatcher aiogram
+#     """
+#     # Регистрируем команды
+#     dp.message.register(cmd_start, Command("start"))
+#     dp.message.register(cmd_new_post, Command("new_post"))
+#     dp.message.register(cmd_queue, Command("queue"))
+#     dp.message.register(cmd_stats, Command("stats"))
+#     dp.message.register(cmd_scheduler, Command("scheduler"))
+#
+#     # Регистрируем callback handlers
+#     dp.callback_query.register(handle_new_post, lambda c: c.data == "new_post")
+#     dp.callback_query.register(handle_view_queue, lambda c: c.data == "view_queue")
+#     dp.callback_query.register(handle_view_stats, lambda c: c.data == "view_stats")
+#     dp.callback_query.register(handle_scheduler, lambda c: c.data == "scheduler")
+#
+#     # Регистрируем обработчик для кнопки "Назад"
+#     dp.callback_query.register(handle_back_to_menu, lambda c: c.data == "back_to_menu")
+#
+#     logger.info("✅ Handlers зарегистрированы")
 
 
 __all__ = ["setup_handlers"]

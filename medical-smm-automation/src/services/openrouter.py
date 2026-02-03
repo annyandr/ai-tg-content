@@ -28,7 +28,41 @@ class OpenRouterService:
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         if self.session:
             await self.session.close()
-    
+
+    async def generate_with_prompts(
+            self,
+            system_prompt: str,
+            user_prompt: str,
+            model: str = None,
+            temperature: float = None,
+            max_tokens: int = None
+    ) -> Dict[str, Any]:
+        """
+        Удобная обертка для генерации с system_prompt и user_prompt
+
+        Args:
+            system_prompt: Системный промпт
+            user_prompt: Пользовательский промпт
+            model: Модель (по умолчанию из config)
+            temperature: Температура (по умолчанию из config)
+            max_tokens: Макс токенов (по умолчанию из config)
+
+        Returns:
+            Dict с результатом {"success": bool, "content": str, "error": str}
+        """
+        # Формируем messages в формате OpenAI Chat Completions API
+        messages = [
+            {"role": "system", "content": system_prompt.strip()},
+            {"role": "user", "content": user_prompt.strip()}
+        ]
+
+        return await self.generate(
+            messages=messages,
+            model=model,
+            temperature=temperature,
+            max_tokens=max_tokens
+        )
+
     async def generate(
         self,
         messages: List[Dict[str, str]],

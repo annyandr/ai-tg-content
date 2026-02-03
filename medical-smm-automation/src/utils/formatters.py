@@ -1,27 +1,37 @@
-# Очистка текста от лишних символов
-clean_text(text)
+import re
 
-# Извлечение заголовка
-extract_title(text)
 
-# Подсчёт слов и предложений
-count_words(text)
-count_sentences(text)
+def clean_text(text: str) -> str:
+    """Очищает текст от лишних пробелов и символов."""
+    if not text:
+        return ""
+    # Удаляем лишние пробелы и переносы строк
+    text = re.sub(r'\n{3,}', '\n\n', text)
+    text = text.strip()
+    return text
 
-# Работа с эмодзи
-extract_emojis(text)
 
-# Обрезка текста
-truncate_text(text, max_length=100)
+def extract_title(text: str) -> str:
+    """Извлекает первую строку в качестве заголовка."""
+    if not text:
+        return "Без заголовка"
+    return text.split('\n')[0].strip()[:50]
 
-# Markdown → Plain text
-markdown_to_plain(text)
 
-# Форматирование для любого канала
-format_for_channel(text, channel_emoji="🍑", channel_link="...", specialty_name="...")
+def count_words(text: str) -> int:
+    """Считает количество слов в тексте."""
+    if not text:
+        return 0
+    return len(text.split())
 
-# Валидация Markdown
-validate_markdown(text)  # Проверяет закрытые теги
 
-# Время чтения
-estimate_reading_time(text)  # В секундах
+def format_for_channel(text: str, specialty: str) -> str:
+    """Форматирует текст для канала (добавляет хештеги и подпись)."""
+    hashtags = {
+        "gynecology": "#гинекология #здоровье #медицина",
+        "pediatrics": "#педиатрия #дети #здоровье",
+        "therapy": "#терапия #врач #здоровье"
+    }
+
+    tag_line = hashtags.get(specialty, "#медицина")
+    return f"{text}\n\n{tag_line}"

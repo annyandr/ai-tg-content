@@ -2,11 +2,10 @@
 Базовый класс для AI-агентов
 """
 
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 from abc import ABC, abstractmethod
 
 from src.services.openrouter import OpenRouterService
-from src.core.logger import logger
 
 
 class BaseAgent(ABC):

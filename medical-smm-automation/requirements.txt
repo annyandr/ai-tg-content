@@ -1,8 +1,8 @@
-aiogram==3.4.1
-aiohttp==3.9.5
-apscheduler==3.10.4
-python-dotenv==1.0.1
-sqlalchemy==2.0.36
-aiosqlite==0.20.0
-pydantic==2.5.3
-python-dateutil==2.9.0.post0
+aiogram
+aiohttp
+apscheduler
+python-dotenv
+sqlalchemy
+aiosqlite
+pydantic
+python-dateutil
