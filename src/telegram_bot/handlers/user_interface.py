@@ -73,10 +73,12 @@ async def cmd_start(message: Message):
 @router.callback_query(F.data == "new_post")
 async def start_post_creation(callback: CallbackQuery, state: FSMContext):
     """Начинаем создание поста - выбор специализации"""
-    
+    # Отвечаем на callback сразу
+    await callback.answer()
+
     # Формируем клавиатуру с доступными специализациями
     keyboard_buttons = []
-    
+
     for specialty, config in SPECIALTY_MAP.items():
         emoji = config['emoji']
         name = config['name']
@@ -86,24 +88,26 @@ async def start_post_creation(callback: CallbackQuery, state: FSMContext):
                 callback_data=f"specialty_{specialty}"
             )
         ])
-    
+
     keyboard_buttons.append([InlineKeyboardButton(text="❌ Отмена", callback_data="cancel")])
     keyboard = InlineKeyboardMarkup(inline_keyboard=keyboard_buttons)
-    
+
     await callback.message.edit_text(
         "🎯 <b>Шаг 1/3: Выбор специализации</b>\n\n"
         "Для какого канала создаём контент?",
         parse_mode="HTML",
         reply_markup=keyboard
     )
-    
+
     await state.set_state(PostCreation.waiting_for_specialty)
-    await callback.answer()
 
 
 @router.callback_query(F.data.startswith("specialty_"))
 async def process_specialty_choice(callback: CallbackQuery, state: FSMContext):
     """Обработка выбора специализации"""
+    # Отвечаем на callback сразу
+    await callback.answer()
+
     specialty = callback.data.replace("specialty_", "")
     config = get_specialty_config(specialty)
     
@@ -130,9 +134,8 @@ async def process_specialty_choice(callback: CallbackQuery, state: FSMContext):
         f"• Обновление протокола ведения беременных с ГСД",
         parse_mode="HTML"
     )
-    
+
     await state.set_state(PostCreation.waiting_for_topic)
-    await callback.answer()
 
 
 # ====================================================================================
@@ -489,16 +492,18 @@ async def process_custom_time(message: Message, state: FSMContext):
 @router.callback_query(F.data == "regenerate", PostCreation.reviewing_post)
 async def regenerate_post(callback: CallbackQuery, state: FSMContext):
     """Регенерация поста"""
+    # Отвечаем на callback сразу, чтобы не истек таймаут
+    await callback.answer()
+
     await callback.message.edit_text(
         "🔄 <b>Генерирую новый вариант...</b>",
         parse_mode="HTML"
     )
-    
+
     data = await state.get_data()
-    
+
     # Повторяем генерацию
     await process_topic_and_generate(callback.message, state)
-    await callback.answer()
 
 
 # ====================================================================================
