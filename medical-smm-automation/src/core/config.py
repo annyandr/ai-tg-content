@@ -3,9 +3,19 @@
 """
 
 import os
+from pathlib import Path
 from dotenv import load_dotenv
 
-load_dotenv()
+# Явно указываем путь к .env
+BASE_DIR = Path(__file__).resolve().parent.parent.parent
+dotenv_path = BASE_DIR / '.env'
+
+# Загружаем .env с явным путём
+load_dotenv(dotenv_path=dotenv_path, override=True)
+
+print(f"🔍 Загрузка .env из: {dotenv_path}")
+print(f"🔍 Файл существует: {dotenv_path.exists()}")
+print(f"🔍 BOT_TOKEN загружен: {bool(os.getenv('BOT_TOKEN'))}")
 
 
 class Config:
@@ -20,16 +30,16 @@ class Config:
     OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
     
     # AI Models
-    DEFAULT_MODEL = "anthropic/claude-3.5-sonnet"
-    TEMPERATURE = 0.7
-    MAX_TOKENS = 2000
+    DEFAULT_MODEL = os.getenv("DEFAULT_MODEL", "anthropic/claude-3.5-sonnet")
+    TEMPERATURE = float(os.getenv("TEMPERATURE", "0.7"))
+    MAX_TOKENS = int(os.getenv("MAX_TOKENS", "2000"))
     
     # Database
     DATABASE_URL = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./data/database/medical_smm.db")
     
     # Scheduling
-    POSTING_TIMES = ["09:00", "20:00"]  # MSK
-    TIMEZONE = "Europe/Moscow"
+    POSTING_TIMES = os.getenv("POSTING_TIMES", "09:00,20:00").split(",")
+    TIMEZONE = os.getenv("TIMEZONE", "Europe/Moscow")
     
     # Channels configuration
     CHANNELS_CONFIG_PATH = "./data/channels.json"

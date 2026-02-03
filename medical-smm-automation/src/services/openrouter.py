@@ -2,6 +2,7 @@
 Сервис для работы с OpenRouter API
 """
 
+import ssl
 import aiohttp
 from typing import Dict, Any, List, Optional
 from src.core.logger import logger
@@ -49,7 +50,13 @@ class OpenRouterService:
         """
         
         if not self.session:
-            self.session = aiohttp.ClientSession()
+            # Создаём SSL context без проверки сертификатов
+            ssl_context = ssl.create_default_context()
+            ssl_context.check_hostname = False
+            ssl_context.verify_mode = ssl.CERT_NONE
+            
+            connector = aiohttp.TCPConnector(ssl=ssl_context)
+            self.session = aiohttp.ClientSession(connector=connector)
         
         headers = {
             "Authorization": f"Bearer {self.api_key}",
@@ -93,14 +100,6 @@ class OpenRouterService:
                         "content": None,
                         "error": f"API error {response.status}: {error_text}"
                     }
-        
-        except asyncio.TimeoutError:
-            logger.error("❌ OpenRouter timeout")
-            return {
-                "success": False,
-                "content": None,
-                "error": "Timeout: API не ответил за 60 секунд"
-            }
         
         except Exception as e:
             logger.error(f"❌ OpenRouter exception: {e}")

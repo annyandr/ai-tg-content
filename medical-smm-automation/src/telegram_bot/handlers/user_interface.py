@@ -555,4 +555,31 @@ async def cancel_action(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
-__all__ = ["router", "set_agents"]
+def setup_handlers(dp: Dispatcher):
+    """
+    Регистрация всех handlers
+    
+    Args:
+        dp: Dispatcher aiogram
+    """
+    # Регистрируем команды
+    dp.message.register(cmd_start, Command("start"))
+    dp.message.register(cmd_new_post, Command("new_post"))
+    dp.message.register(cmd_queue, Command("queue"))
+    dp.message.register(cmd_stats, Command("stats"))
+    dp.message.register(cmd_scheduler, Command("scheduler"))
+    
+    # Регистрируем callback handlers
+    dp.callback_query.register(handle_new_post, lambda c: c.data == "new_post")
+    dp.callback_query.register(handle_view_queue, lambda c: c.data == "view_queue")
+    dp.callback_query.register(handle_view_stats, lambda c: c.data == "view_stats")
+    dp.callback_query.register(handle_scheduler, lambda c: c.data == "scheduler")
+    
+    # Регистрируем обработчик для кнопки "Назад"
+    dp.callback_query.register(handle_back_to_menu, lambda c: c.data == "back_to_menu")
+    
+    logger.info("✅ Handlers зарегистрированы")
+
+
+__all__ = ["setup_handlers"]
+

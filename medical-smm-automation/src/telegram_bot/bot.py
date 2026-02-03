@@ -3,13 +3,16 @@ Telegram Bot для публикации постов в каналы
 """
 
 import asyncio
+import ssl
 from datetime import datetime
 from typing import Optional, List, Dict, Any
 from aiogram import Bot
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, FSInputFile
+from aiogram.client.session.aiohttp import AiohttpSession
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.exceptions import TelegramAPIError
+import aiohttp
 
-from src.telegram_bot.models import PublishTask, TaskStatus, BotStats, ButtonModel
+from src.telegram_bot.models import PublishTask, TaskStatus, ButtonModel
 from src.telegram_bot.task_queue import TaskQueue
 from src.core.logger import logger
 from src.core.exceptions import PublishError
@@ -28,12 +31,15 @@ class MedicalTelegramBot:
             bot_token: Токен Telegram бота
             task_queue: Очередь задач (опционально, создастся автоматически)
         """
+        # Инициализируем бота (SSL уже отключен глобально в main.py)
         self.bot = Bot(token=bot_token)
         self.task_queue = task_queue or TaskQueue()
         self.is_running = False
         self._worker_task: Optional[asyncio.Task] = None
         
         logger.info("🤖 MedicalTelegramBot инициализирован")
+
+
     
     async def start(self):
         """Запуск бота и фонового worker'а"""
@@ -308,15 +314,7 @@ class MedicalTelegramBot:
         )
     
     async def cancel_post(self, task_id: str) -> bool:
-        """
-        Отменить запланированную публикацию
-        
-        Args:
-            task_id: ID задачи
-        
-        Returns:
-            True если задача отменена, False если не найдена
-        """
+        """Отменить запланированную публикацию"""
         result = await self.task_queue.cancel_task(task_id)
         
         if result:
@@ -327,24 +325,11 @@ class MedicalTelegramBot:
         return result
     
     async def get_task_status(self, task_id: str) -> Optional[PublishTask]:
-        """
-        Получить статус задачи
-        
-        Args:
-            task_id: ID задачи
-        
-        Returns:
-            Задача или None если не найдена
-        """
+        """Получить статус задачи"""
         return await self.task_queue.get_task(task_id)
     
     def get_stats(self) -> Dict[str, Any]:
-        """
-        Получить статистику бота
-        
-        Returns:
-            Словарь со статистикой
-        """
+        """Получить статистику бота"""
         stats = self.task_queue.get_stats()
         
         # Вычисляем success rate
@@ -362,24 +347,11 @@ class MedicalTelegramBot:
         }
     
     async def get_upcoming_posts(self, limit: int = 10) -> List[PublishTask]:
-        """
-        Получить список запланированных постов
-        
-        Args:
-            limit: Максимум постов
-        
-        Returns:
-            Список задач
-        """
+        """Получить список запланированных постов"""
         return self.task_queue.get_upcoming_tasks(limit=limit)
     
     async def retry_failed_tasks(self) -> int:
-        """
-        Повторить все провалившиеся задачи
-        
-        Returns:
-            Количество успешно повторённых задач
-        """
+        """Повторить все провалившиеся задачи"""
         failed_tasks = await self.task_queue.get_failed_tasks()
         
         if not failed_tasks:
@@ -404,21 +376,5 @@ class MedicalTelegramBot:
         logger.info(f"✅ Успешно повторено: {success_count}/{len(failed_tasks)}")
         return success_count
 
-
-# Для обратной совместимости
-async def add_task(self, task: PublishTask) -> str:
-    """
-    Добавить задачу в очередь (обратная совместимость)
-    
-    Args:
-        task: Задача публикации
-    
-    Returns:
-        ID задачи
-    """
-    return await self.task_queue.add_task(task)
-
-
-MedicalTelegramBot.add_task = add_task
 
 __all__ = ["MedicalTelegramBot"]

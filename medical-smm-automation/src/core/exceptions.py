@@ -1,37 +1,55 @@
 """
-Кастомные исключения
+Кастомные исключения для приложения
 """
 
 
-class MedicalSMMException(Exception):
-    """Базовое исключение системы"""
+class MedicalSMMError(Exception):
+    """Базовое исключение для всех ошибок приложения"""
     pass
 
 
-class GenerationError(MedicalSMMException):
+class BotError(MedicalSMMError):
+    """Ошибка работы бота"""
+    pass
+
+
+class PublishError(MedicalSMMError):
+    """Ошибка публикации в канал"""
+    pass
+
+
+class GenerationError(MedicalSMMError):
     """Ошибка генерации контента"""
     pass
 
 
-class SafetyCheckError(MedicalSMMException):
-    """Ошибка проверки безопасности"""
+class ConfigError(MedicalSMMError):
+    """Ошибка конфигурации"""
     pass
 
 
-class PublishError(MedicalSMMException):
-    """Ошибка публикации"""
+class ValidationError(MedicalSMMError):
+    """Ошибка валидации данных"""
     pass
 
 
-class DatabaseError(MedicalSMMException):
-    """Ошибка работы с БД"""
+class APIError(MedicalSMMError):
+    """Ошибка внешнего API"""
+    pass
+
+
+class SchedulerError(MedicalSMMError):
+    """Ошибка планировщика"""
     pass
 
 
 __all__ = [
-    "MedicalSMMException",
-    "GenerationError",
-    "SafetyCheckError",
+    "MedicalSMMError",
+    "BotError",
     "PublishError",
-    "DatabaseError"
+    "GenerationError",
+    "ConfigError",
+    "ValidationError",
+    "APIError",
+    "SchedulerError"
 ]
