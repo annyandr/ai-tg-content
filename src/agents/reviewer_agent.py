@@ -2,6 +2,7 @@
 Агент проверки контента на медицинскую безопасность
 """
 
+import json
 from typing import Dict, Any
 
 from src.agents.base_agent import BaseAgent
@@ -67,7 +68,6 @@ class ReviewerAgent(BaseAgent):
             }
         
         try:
-            import json
             review_data = json.loads(result["content"])
             
             if review_data.get("safe"):

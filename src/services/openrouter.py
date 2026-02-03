@@ -88,7 +88,7 @@ class OpenRouterService:
             ssl_context = ssl.create_default_context()
             ssl_context.check_hostname = False
             ssl_context.verify_mode = ssl.CERT_NONE
-            
+
             connector = aiohttp.TCPConnector(ssl=ssl_context)
             self.session = aiohttp.ClientSession(connector=connector)
         
@@ -112,13 +112,13 @@ class OpenRouterService:
                 json=data,
                 timeout=aiohttp.ClientTimeout(total=60)
             ) as response:
-                
+
                 if response.status == 200:
                     result = await response.json()
                     content = result["choices"][0]["message"]["content"]
-                    
+
                     logger.info(f"✅ OpenRouter: успешная генерация ({len(content)} символов)")
-                    
+
                     return {
                         "success": True,
                         "content": content,
@@ -127,12 +127,22 @@ class OpenRouterService:
                     }
                 else:
                     error_text = await response.text()
-                    logger.error(f"❌ OpenRouter error {response.status}: {error_text}")
-                    
+
+                    # Проверяем, не HTML ли это (блокировка firewall)
+                    if '<!DOCTYPE' in error_text or '<html' in error_text:
+                        logger.error(f"❌ Доступ заблокирован корпоративным firewall")
+                        return {
+                            "success": False,
+                            "content": None,
+                            "error": "API заблокирован. Попробуйте с другой машины или используйте VPN"
+                        }
+
+                    logger.error(f"❌ OpenRouter error {response.status}: {error_text[:200]}")
+
                     return {
                         "success": False,
                         "content": None,
-                        "error": f"API error {response.status}: {error_text}"
+                        "error": f"API error {response.status}: {error_text[:200]}"
                     }
         
         except Exception as e:

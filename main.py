@@ -10,7 +10,8 @@ from datetime import datetime
 
 # Отключаем проверку SSL сертификатов глобально (для корпоративных сетей)
 os.environ['PYTHONHTTPSVERIFY'] = '0'
-ssl._create_default_https_context = ssl._create_unverified_context
+# noinspection PyProtectedMember
+ssl._create_default_https_context = ssl._create_unverified_context  # noqa
 
 from src.core.config import config
 from src.core.logger import logger
@@ -18,6 +19,7 @@ from src.core.exceptions import BotError, PublishError
 from src.services.openrouter import OpenRouterService
 from src.agents.generator_agent import ContentGeneratorAgent
 from src.agents.reviewer_agent import ReviewerAgent
+from src.agents.safety_agent import SafetyAgent
 from src.telegram_bot.bot import MedicalTelegramBot
 from src.telegram_bot.task_queue import TaskQueue
 from src.telegram_bot.handlers.user_interface import setup_handlers
@@ -77,6 +79,7 @@ async def main():
         # 3. Инициализация AI-агентов
         generator_agent = ContentGeneratorAgent(openrouter=openrouter)
         reviewer_agent = ReviewerAgent(openrouter=openrouter)
+        safety_agent = SafetyAgent(openrouter=openrouter)
         logger.info("✅ AI-агенты инициализированы")
         
         # 4. Инициализация очереди задач
@@ -92,6 +95,11 @@ async def main():
         
         # 6. Настройка Dispatcher и handlers
         dispatcher = Dispatcher()
+
+        # Инициализируем агенты в handlers (для user_interface.py)
+        from src.telegram_bot.handlers.user_interface import set_agents
+        set_agents(generator_agent, safety_agent, telegram_bot)
+
         setup_handlers(dispatcher)
         logger.info("✅ Handlers настроены")
         

@@ -30,8 +30,9 @@ try:
     file_handler.setLevel(logging.DEBUG)
     file_handler.setFormatter(formatter)
     logger.addHandler(file_handler)
-except Exception:
-    pass  # Если нет папки logs - работаем без файлового логирования
+except (OSError, IOError) as e:
+    # Если нет папки logs или нет прав доступа - работаем без файлового логирования
+    pass
 
 logger.addHandler(console_handler)
 
