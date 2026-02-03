@@ -62,16 +62,34 @@ class SafetyAgent(BaseAgent):
         
         # Парсим JSON ответ
         try:
-            safety_data = json.loads(result["content"])
-            
+            response_content = result["content"].strip()
+
+            # Логируем сырой ответ для отладки
+            logger.debug(f"Safety Agent raw response: {response_content[:200]}...")
+
+            # Пытаемся извлечь JSON из markdown блоков (```json ... ```)
+            if "```json" in response_content:
+                start = response_content.find("```json") + 7
+                end = response_content.find("```", start)
+                if end != -1:
+                    response_content = response_content[start:end].strip()
+            elif "```" in response_content:
+                # Просто ```  без json
+                start = response_content.find("```") + 3
+                end = response_content.find("```", start)
+                if end != -1:
+                    response_content = response_content[start:end].strip()
+
+            safety_data = json.loads(response_content)
+
             is_safe = safety_data.get("is_safe", False)
             severity = safety_data.get("severity", "unknown")
-            
+
             if is_safe:
                 logger.info(f"✅ Контент безопасен: {severity}")
             else:
                 logger.warning(f"⚠️ Контент требует проверки: {severity}")
-            
+
             return {
                 "success": True,
                 "is_safe": is_safe,
@@ -80,10 +98,11 @@ class SafetyAgent(BaseAgent):
                 "recommendations": safety_data.get("recommendations", []),
                 "statistics": safety_data.get("statistics", {})
             }
-        
-        except json.JSONDecodeError:
-            logger.error("❌ Не удалось распарсить JSON ответ от Safety Agent")
-            
+
+        except json.JSONDecodeError as e:
+            logger.error(f"❌ Не удалось распарсить JSON ответ от Safety Agent: {e}")
+            logger.error(f"Raw response: {result['content'][:500]}...")
+
             # Fallback: базовая проверка
             return {
                 "success": True,
@@ -91,6 +110,19 @@ class SafetyAgent(BaseAgent):
                 "severity": "low",
                 "issues": [],
                 "recommendations": ["Не удалось выполнить полную проверку"],
+                "statistics": {}
+            }
+        except KeyError as e:
+            logger.error(f"❌ Отсутствует ключ в ответе Safety Agent: {e}")
+            logger.error(f"Response data: {safety_data}")
+
+            # Fallback
+            return {
+                "success": True,
+                "is_safe": True,
+                "severity": "low",
+                "issues": [],
+                "recommendations": ["Неполный ответ от проверки безопасности"],
                 "statistics": {}
             }
 

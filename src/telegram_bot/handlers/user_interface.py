@@ -146,9 +146,11 @@ async def process_specialty_choice(callback: CallbackQuery, state: FSMContext):
 @router.message(PostCreation.waiting_for_topic)
 async def process_topic_and_generate(message: Message, state: FSMContext):
     """Получаем тему и генерируем пост с AI"""
+    from aiogram.exceptions import TelegramNetworkError, TelegramAPIError
+
     topic = message.text
     data = await state.get_data()
-    
+
     # Показываем прогресс
     progress_msg = await message.answer(
         "🤖 <b>Генерирую контент...</b>\n\n"
@@ -157,7 +159,15 @@ async def process_topic_and_generate(message: Message, state: FSMContext):
         "⏳ Форматирую согласно стилю канала",
         parse_mode="HTML"
     )
-    
+
+    async def safe_edit_progress(text: str):
+        """Безопасное обновление прогресса с обработкой timeout"""
+        try:
+            await progress_msg.edit_text(text, parse_mode="HTML")
+        except (TelegramNetworkError, TelegramAPIError) as e:
+            logger.warning(f"⚠️ Не удалось обновить прогресс: {e}")
+            # Продолжаем работу даже если не удалось обновить UI
+
     try:
         # Формируем данные для генератора
         news = {
@@ -166,55 +176,53 @@ async def process_topic_and_generate(message: Message, state: FSMContext):
             "source_name": "Пользовательский запрос",
             "source_url": ""
         }
-        
+
         channel = {
             "name": data['name'],
             "specialty": data['specialty'],
             "emoji": data['emoji'],
             "link": data['link']
         }
-        
+
         # 1. Генерируем контент
-        await progress_msg.edit_text(
+        await safe_edit_progress(
             "🤖 <b>Генерирую контент...</b>\n\n"
             "✅ Анализирую тему\n"
             "⏳ Создаю структуру поста\n"
-            "⏳ Проверяю медицинскую безопасность",
-            parse_mode="HTML"
+            "⏳ Проверяю медицинскую безопасность"
         )
-        
+
         gen_result = await generator_agent.execute(
             news=news,
             channel=channel
         )
-        
+
         if not gen_result["success"]:
             raise Exception(f"Ошибка генерации: {gen_result.get('error')}")
-        
+
         post_content = gen_result["content"]
-        
+
         # 2. Проверяем безопасность
-        await progress_msg.edit_text(
+        await safe_edit_progress(
             "🤖 <b>Генерирую контент...</b>\n\n"
             "✅ Анализирую тему\n"
             "✅ Создал структуру поста\n"
-            "⏳ Проверяю медицинскую безопасность",
-            parse_mode="HTML"
+            "⏳ Проверяю медицинскую безопасность"
         )
-        
+
         safety_result = await safety_agent.execute(
             content=post_content,
             specialty=data['specialty'],
             channel_name=data['name']
         )
-        
+
         if not safety_result["success"]:
             raise Exception("Ошибка проверки безопасности")
-        
+
         is_safe = safety_result.get("is_safe", False)
         severity = safety_result.get("severity", "unknown")
         issues = safety_result.get("issues", [])
-        
+
         # Определяем эмодзи статуса
         if is_safe and severity == "safe":
             status_emoji = "✅"
@@ -228,7 +236,7 @@ async def process_topic_and_generate(message: Message, state: FSMContext):
             status_emoji = "❌"
             status_text = "ТРЕБУЕТ ПРАВКИ"
             status_color = "🔴"
-        
+
         # Сохраняем в состояние
         await state.update_data(
             topic=topic,
@@ -237,22 +245,25 @@ async def process_topic_and_generate(message: Message, state: FSMContext):
             severity=severity,
             issues=issues
         )
-        
+
         # 3. Показываем результат
-        await progress_msg.delete()
-        
+        try:
+            await progress_msg.delete()
+        except (TelegramNetworkError, TelegramAPIError):
+            pass  # Игнорируем ошибки при удалении
+
         preview_text = (
             f"✨ <b>Пост готов!</b>\n\n"
             f"<b>Специализация:</b> {data['emoji']} {data['name']}\n"
             f"<b>Тема:</b> {topic[:100]}{'...' if len(topic) > 100 else ''}\n\n"
             f"<b>Проверка безопасности:</b> {status_color} {status_emoji} {status_text}\n"
         )
-        
+
         if issues:
             preview_text += f"<b>Замечания:</b> {len(issues)}\n"
-        
+
         preview_text += f"\n{'─' * 40}\n\n{post_content}\n\n{'─' * 40}\n"
-        
+
         # Кнопки действий
         keyboard = InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text="🚀 Опубликовать мгновенно", callback_data="publish_now")],
@@ -260,23 +271,32 @@ async def process_topic_and_generate(message: Message, state: FSMContext):
             [InlineKeyboardButton(text="🔄 Сгенерировать заново", callback_data="regenerate")],
             [InlineKeyboardButton(text="❌ Отменить", callback_data="cancel")]
         ])
-        
+
         await message.answer(
             preview_text,
             parse_mode="HTML",
             reply_markup=keyboard
         )
-        
+
         await state.set_state(PostCreation.reviewing_post)
-        
+
     except Exception as e:
         logger.error(f"Ошибка генерации: {e}")
-        await progress_msg.edit_text(
-            f"❌ <b>Ошибка генерации контента</b>\n\n"
-            f"<code>{str(e)}</code>\n\n"
-            f"Попробуйте ещё раз или измените тему.",
-            parse_mode="HTML"
-        )
+        try:
+            await progress_msg.edit_text(
+                f"❌ <b>Ошибка генерации контента</b>\n\n"
+                f"<code>{str(e)}</code>\n\n"
+                f"Попробуйте ещё раз или измените тему.",
+                parse_mode="HTML"
+            )
+        except (TelegramNetworkError, TelegramAPIError):
+            # Если не удалось обновить, отправим новое сообщение
+            await message.answer(
+                f"❌ <b>Ошибка генерации контента</b>\n\n"
+                f"<code>{str(e)}</code>\n\n"
+                f"Попробуйте ещё раз или измените тему.",
+                parse_mode="HTML"
+            )
         await state.clear()
 
 
@@ -601,6 +621,9 @@ async def cmd_queue(message: Message):
             queue_text += "⏰ <b>Запланированные посты:</b>\n\n"
             for i, task in enumerate(upcoming, 1):
                 time_str = task.scheduled_time.strftime('%d.%m.%Y %H:%M')
+
+                # task.status уже строка из-за use_enum_values = True
+                status_value = task.status if isinstance(task.status, str) else task.status.value
                 status_emoji = {
                     "pending": "🟡",
                     "scheduled": "⏰",
@@ -608,7 +631,7 @@ async def cmd_queue(message: Message):
                     "completed": "✅",
                     "failed": "❌",
                     "cancelled": "🚫"
-                }.get(task.status.value, "❓")
+                }.get(status_value, "❓")
 
                 channel_display = task.channel_id
                 if task.channel_id.startswith('-'):
@@ -791,6 +814,9 @@ async def handle_refresh_queue(callback: CallbackQuery):
             queue_text += "⏰ <b>Запланированные посты:</b>\n\n"
             for i, task in enumerate(upcoming, 1):
                 time_str = task.scheduled_time.strftime('%d.%m.%Y %H:%M')
+
+                # task.status уже строка из-за use_enum_values = True
+                status_value = task.status if isinstance(task.status, str) else task.status.value
                 status_emoji = {
                     "pending": "🟡",
                     "scheduled": "⏰",
@@ -798,7 +824,7 @@ async def handle_refresh_queue(callback: CallbackQuery):
                     "completed": "✅",
                     "failed": "❌",
                     "cancelled": "🚫"
-                }.get(task.status.value, "❓")
+                }.get(status_value, "❓")
 
                 channel_display = task.channel_id
                 if task.channel_id.startswith('-'):
