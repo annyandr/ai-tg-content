@@ -575,19 +575,75 @@ async def cmd_new_post(message: Message):
 
 @router.message(Command("queue"))
 async def cmd_queue(message: Message):
-    """Команда /queue - просмотр очереди"""
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="📋 Мои запланированные посты", callback_data="my_posts")],
-        [InlineKeyboardButton(text="◀️ Главное меню", callback_data="back_to_menu")]
-    ])
+    """Команда /queue - детальный просмотр очереди публикаций"""
+    if not telegram_bot:
+        await message.answer("❌ Бот не инициализирован", parse_mode="HTML")
+        return
 
-    await message.answer(
-        "📋 <b>Очередь публикаций</b>\n\n"
-        "Функция в разработке.\n\n"
-        "Скоро здесь будет список всех запланированных постов.",
-        parse_mode="HTML",
-        reply_markup=keyboard
-    )
+    try:
+        # Получаем статистику
+        stats = telegram_bot.get_stats()
+
+        # Получаем запланированные посты
+        upcoming = await telegram_bot.get_upcoming_posts(limit=10)
+
+        queue_text = f"""📋 <b>Очередь публикаций</b>
+
+📊 <b>Статистика:</b>
+• Ожидают: {stats['pending']}
+• Запланировано: {stats['scheduled']}
+• Выполнено: {stats['completed']}
+• Ошибок: {stats['failed']}
+
+"""
+
+        if upcoming:
+            queue_text += "⏰ <b>Запланированные посты:</b>\n\n"
+            for i, task in enumerate(upcoming, 1):
+                time_str = task.scheduled_time.strftime('%d.%m.%Y %H:%M')
+                status_emoji = {
+                    "pending": "🟡",
+                    "scheduled": "⏰",
+                    "processing": "🔄",
+                    "completed": "✅",
+                    "failed": "❌",
+                    "cancelled": "🚫"
+                }.get(task.status.value, "❓")
+
+                channel_display = task.channel_id
+                if task.channel_id.startswith('-'):
+                    channel_display = "Приватный канал"
+                elif not task.channel_id.startswith('@'):
+                    channel_display = f"@{task.channel_id}"
+
+                text_preview = task.text[:50] + "..." if len(task.text) > 50 else task.text
+                text_preview = text_preview.replace('\n', ' ')
+
+                queue_text += f"{i}. {status_emoji} <b>{time_str}</b>\n"
+                queue_text += f"   📢 {channel_display}\n"
+                queue_text += f"   📝 {text_preview}\n"
+                queue_text += f"   🆔 <code>{task.task_id}</code>\n\n"
+        else:
+            queue_text += "<i>Нет запланированных публикаций</i>"
+
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="✨ Создать новый пост", callback_data="new_post")],
+            [InlineKeyboardButton(text="🔄 Обновить", callback_data="refresh_queue")],
+            [InlineKeyboardButton(text="◀️ Главное меню", callback_data="back_to_menu")]
+        ])
+
+        await message.answer(
+            queue_text,
+            parse_mode="HTML",
+            reply_markup=keyboard
+        )
+
+    except Exception as e:
+        logger.error(f"Ошибка в /queue: {e}")
+        await message.answer(
+            f"❌ <b>Ошибка получения очереди</b>\n\n<code>{str(e)}</code>",
+            parse_mode="HTML"
+        )
 
 
 @router.message(Command("stats"))
@@ -705,6 +761,81 @@ async def handle_back_to_menu(callback: CallbackQuery):
     await callback.answer()
 
 
+@router.callback_query(F.data == "refresh_queue")
+async def handle_refresh_queue(callback: CallbackQuery):
+    """Обновление очереди публикаций"""
+    await callback.answer("🔄 Обновляю...")
+
+    if not telegram_bot:
+        await callback.message.edit_text("❌ Бот не инициализирован", parse_mode="HTML")
+        return
+
+    try:
+        # Получаем статистику
+        stats = telegram_bot.get_stats()
+
+        # Получаем запланированные посты
+        upcoming = await telegram_bot.get_upcoming_posts(limit=10)
+
+        queue_text = f"""📋 <b>Очередь публикаций</b>
+
+📊 <b>Статистика:</b>
+• Ожидают: {stats['pending']}
+• Запланировано: {stats['scheduled']}
+• Выполнено: {stats['completed']}
+• Ошибок: {stats['failed']}
+
+"""
+
+        if upcoming:
+            queue_text += "⏰ <b>Запланированные посты:</b>\n\n"
+            for i, task in enumerate(upcoming, 1):
+                time_str = task.scheduled_time.strftime('%d.%m.%Y %H:%M')
+                status_emoji = {
+                    "pending": "🟡",
+                    "scheduled": "⏰",
+                    "processing": "🔄",
+                    "completed": "✅",
+                    "failed": "❌",
+                    "cancelled": "🚫"
+                }.get(task.status.value, "❓")
+
+                channel_display = task.channel_id
+                if task.channel_id.startswith('-'):
+                    channel_display = "Приватный канал"
+                elif not task.channel_id.startswith('@'):
+                    channel_display = f"@{task.channel_id}"
+
+                text_preview = task.text[:50] + "..." if len(task.text) > 50 else task.text
+                text_preview = text_preview.replace('\n', ' ')
+
+                queue_text += f"{i}. {status_emoji} <b>{time_str}</b>\n"
+                queue_text += f"   📢 {channel_display}\n"
+                queue_text += f"   📝 {text_preview}\n"
+                queue_text += f"   🆔 <code>{task.task_id}</code>\n\n"
+        else:
+            queue_text += "<i>Нет запланированных публикаций</i>"
+
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="✨ Создать новый пост", callback_data="new_post")],
+            [InlineKeyboardButton(text="🔄 Обновить", callback_data="refresh_queue")],
+            [InlineKeyboardButton(text="◀️ Главное меню", callback_data="back_to_menu")]
+        ])
+
+        await callback.message.edit_text(
+            queue_text,
+            parse_mode="HTML",
+            reply_markup=keyboard
+        )
+
+    except Exception as e:
+        logger.error(f"Ошибка в refresh_queue: {e}")
+        await callback.message.edit_text(
+            f"❌ <b>Ошибка обновления очереди</b>\n\n<code>{str(e)}</code>",
+            parse_mode="HTML"
+        )
+
+
 @router.callback_query(F.data == "cancel")
 async def handle_cancel(callback: CallbackQuery, state: FSMContext):
     """Отмена операции"""
@@ -734,8 +865,14 @@ def setup_handlers(dp: Dispatcher):
     """
     Регистрация всех handlers в Dispatcher
     """
+    # Регистрируем user interface handlers
     dp.include_router(router)
     logger.info("✅ UserInterface handlers зарегистрированы")
+
+    # Регистрируем admin handlers
+    from src.telegram_bot.handlers.admin import router as admin_router
+    dp.include_router(admin_router)
+    logger.info("✅ Admin handlers зарегистрированы")
 
 # def setup_handlers(dp: Dispatcher):
 #     """

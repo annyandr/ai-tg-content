@@ -93,6 +93,10 @@ async def main():
         from src.telegram_bot.handlers.user_interface import set_agents
         set_agents(generator_agent, safety_agent, telegram_bot)
 
+        # Инициализируем telegram_bot в admin handlers
+        from src.telegram_bot.handlers.admin import set_telegram_bot
+        set_telegram_bot(telegram_bot)
+
         setup_handlers(dispatcher)
         logger.info("✅ Handlers настроены")
         

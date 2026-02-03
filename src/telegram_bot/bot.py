@@ -194,22 +194,64 @@ class MedicalTelegramBot:
             # Ошибка Telegram API
             error_msg = f"Telegram API error: {e}"
             logger.error(f"❌ {error_msg}")
-            
+
             task.last_error = error_msg
             await self.task_queue.fail_task(task.task_id, error_msg)
-            
+
+            # Уведомляем админов об ошибке
+            await self._notify_admins_about_error(task, error_msg)
+
             raise PublishError(error_msg)
-        
+
         except Exception as e:
             # Другие ошибки
             error_msg = f"Unexpected error: {e}"
             logger.error(f"❌ {error_msg}")
-            
+
             task.last_error = error_msg
             await self.task_queue.fail_task(task.task_id, error_msg)
-            
+
+            # Уведомляем админов об ошибке
+            await self._notify_admins_about_error(task, error_msg)
+
             raise PublishError(error_msg)
-    
+
+    async def _notify_admins_about_error(self, task: PublishTask, error_msg: str):
+        """
+        Отправка уведомления админам об ошибке публикации
+
+        Args:
+            task: Задача, при публикации которой произошла ошибка
+            error_msg: Сообщение об ошибке
+        """
+        from src.core.config import config
+
+        if not config.ADMIN_IDS:
+            logger.warning("⚠️ ADMIN_IDS не настроены - уведомления не отправлены")
+            return
+
+        error_notification = f"""❌ <b>Ошибка публикации</b>
+
+<b>Задача:</b> <code>{task.task_id}</code>
+<b>Канал:</b> {task.channel_id}
+<b>Ошибка:</b> <code>{error_msg[:300]}</code>
+<b>Время:</b> {datetime.now().strftime('%d.%m.%Y %H:%M')}
+<b>Попытка:</b> {task.retry_count + 1}/{task.max_retries}
+"""
+
+        if task.can_retry():
+            error_notification += "\n🔄 Задача будет повторена автоматически"
+        else:
+            error_notification += "\n❌ Превышен лимит повторов"
+
+        # Отправляем уведомление всем админам
+        for admin_id in config.ADMIN_IDS:
+            try:
+                await self.bot.send_message(admin_id, error_notification, parse_mode="HTML")
+                logger.info(f"📧 Уведомление об ошибке отправлено админу {admin_id}")
+            except Exception as e:
+                logger.error(f"❌ Не удалось отправить уведомление админу {admin_id}: {e}")
+
     async def schedule_post(
         self,
         channel_id: str,
