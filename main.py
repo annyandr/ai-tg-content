@@ -29,13 +29,6 @@ from src.scheduler.tasks import SchedulerTasks
 from aiogram import Dispatcher
 from aiogram.enums import ParseMode
 
-# Настройка базового логирования
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s | %(levelname)-8s | %(name)s | %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S'
-)
-
 # Глобальные переменные для graceful shutdown
 telegram_bot = None
 scheduler = None
