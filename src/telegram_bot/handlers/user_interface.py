@@ -4,6 +4,7 @@
 """
 from datetime import datetime, timedelta
 import uuid
+import html
 
 from aiogram import Router, F, types, Dispatcher
 from aiogram.filters import Command
@@ -619,8 +620,10 @@ async def cmd_queue(message: Message):
                 elif not task.channel_id.startswith('@'):
                     channel_display = f"@{task.channel_id}"
 
+                # Экранируем HTML теги в тексте поста для безопасного отображения
                 text_preview = task.text[:50] + "..." if len(task.text) > 50 else task.text
                 text_preview = text_preview.replace('\n', ' ')
+                text_preview = html.escape(text_preview)
 
                 queue_text += f"{i}. {status_emoji} <b>{time_str}</b>\n"
                 queue_text += f"   📢 {channel_display}\n"
@@ -855,8 +858,10 @@ async def handle_refresh_queue(callback: CallbackQuery):
                 elif not task.channel_id.startswith('@'):
                     channel_display = f"@{task.channel_id}"
 
+                # Экранируем HTML теги в тексте поста для безопасного отображения
                 text_preview = task.text[:50] + "..." if len(task.text) > 50 else task.text
                 text_preview = text_preview.replace('\n', ' ')
+                text_preview = html.escape(text_preview)
 
                 queue_text += f"{i}. {status_emoji} <b>{time_str}</b>\n"
                 queue_text += f"   📢 {channel_display}\n"
