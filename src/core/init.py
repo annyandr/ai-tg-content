@@ -53,9 +53,7 @@ async def init_services() -> Tuple[
 
     # Initialize content generator service
     content_generator = ContentGeneratorService(
-        openrouter=openrouter,
-        generator_agent=generator_agent,
-        reviewer_agent=reviewer_agent
+        openrouter=openrouter
     )
     logger.info("✅ Content generator service инициализирован")
 
