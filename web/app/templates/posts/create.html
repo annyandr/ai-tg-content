@@ -1,0 +1,245 @@
+{% extends "base.html" %}
+
+{% block title %}Создать пост - Medical SMM Bot{% endblock %}
+
+{% block extra_head %}
+<!-- Quill.js Editor -->
+<link href="https://cdn.quilljs.com/1.3.6/quill.snow.css" rel="stylesheet">
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1><i class="bi bi-plus-circle"></i> Создание нового поста</h1>
+    <a href="{{ url_for('posts.list_posts') }}" class="btn btn-secondary">
+        <i class="bi bi-arrow-left"></i> Назад
+    </a>
+</div>
+
+<div class="row">
+    <div class="col-md-8">
+        <form method="POST" id="create-post-form">
+            <div class="card mb-3">
+                <div class="card-header">
+                    <h5 class="mb-0">Основная информация</h5>
+                </div>
+                <div class="card-body">
+                    <!-- Channel Selection -->
+                    <div class="mb-3">
+                        <label for="channel_id" class="form-label">Канал *</label>
+                        <select class="form-select" id="channel_id" name="channel_id" required>
+                            <option value="">Выберите канал...</option>
+                            {% for channel in channels %}
+                            <option value="{{ channel.id }}">
+                                {{ channel.emoji }} {{ channel.name }} ({{ channel.specialty }})
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <!-- Scheduled Time -->
+                    <div class="mb-3">
+                        <label for="scheduled_time" class="form-label">Время публикации *</label>
+                        <input type="datetime-local" class="form-control" id="scheduled_time"
+                               name="scheduled_time" required>
+                        <small class="text-muted">Выберите дату и время будущей публикации</small>
+                    </div>
+
+                    <!-- Photo URL -->
+                    <div class="mb-3">
+                        <label for="photo_url" class="form-label">URL фото (опционально)</label>
+                        <input type="url" class="form-control" id="photo_url" name="photo_url"
+                               placeholder="https://example.com/image.jpg">
+                    </div>
+                </div>
+            </div>
+
+            <div class="card mb-3">
+                <div class="card-header">
+                    <h5 class="mb-0">Текст поста</h5>
+                </div>
+                <div class="card-body">
+                    <!-- AI Generation -->
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="specialty" class="form-label">Специализация</label>
+                            <select class="form-select" id="specialty" name="specialty">
+                                <option value="">Выберите для AI генерации...</option>
+                                {% for spec in specialties %}
+                                <option value="{{ spec.key }}">{{ spec.emoji }} {{ spec.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="topic" class="form-label">Тема для AI</label>
+                            <input type="text" class="form-control" id="topic"
+                                   placeholder="Например: Новые рекомендации по лечению">
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <button type="button" class="btn btn-secondary" id="generate-btn">
+                            <i class="bi bi-robot"></i> Генерировать с AI
+                        </button>
+                    </div>
+
+                    <!-- Quill Editor -->
+                    <div class="mb-3">
+                        <label class="form-label">Текст поста *</label>
+                        <div id="editor" style="height: 400px; background-color: white;"></div>
+                        <input type="hidden" name="text" id="post-text">
+                        <div class="d-flex justify-content-between mt-2">
+                            <small class="text-muted">Символов: <span id="char-count">0</span> / 4096</small>
+                            <small class="text-muted">Редактируйте текст напрямую или используйте AI генерацию</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Submit Buttons -->
+            <div class="d-flex gap-2 mb-4">
+                <button type="submit" class="btn btn-primary">
+                    <i class="bi bi-check-circle"></i> Создать пост
+                </button>
+                <a href="{{ url_for('posts.list_posts') }}" class="btn btn-secondary">
+                    <i class="bi bi-x-circle"></i> Отмена
+                </a>
+            </div>
+        </form>
+    </div>
+
+    <div class="col-md-4">
+        <!-- Tips -->
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-lightbulb"></i> Советы</h5>
+            </div>
+            <div class="card-body">
+                <ul class="small">
+                    <li>Выберите канал и время публикации</li>
+                    <li>Используйте AI для генерации контента</li>
+                    <li>Отредактируйте сгенерированный текст при необходимости</li>
+                    <li>Можно добавить фото по URL</li>
+                    <li>Максимальная длина: 4096 символов</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- Preview -->
+        <div class="card mt-3">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-eye"></i> Превью</h5>
+            </div>
+            <div class="card-body">
+                <div id="preview" class="border rounded p-3 bg-light" style="min-height: 200px;">
+                    <p class="text-muted text-center">Превью появится после ввода текста</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<!-- Quill.js -->
+<script src="https://cdn.quilljs.com/1.3.6/quill.js"></script>
+
+<script>
+// Initialize Quill editor
+var quill = new Quill('#editor', {
+    theme: 'snow',
+    modules: {
+        toolbar: [
+            ['bold', 'italic', 'underline'],
+            ['link'],
+            [{ 'list': 'ordered'}, { 'list': 'bullet' }],
+            ['clean']
+        ]
+    },
+    placeholder: 'Введите текст поста или сгенерируйте с помощью AI...'
+});
+
+// Update char count
+function updateCharCount() {
+    const text = quill.getText();
+    document.getElementById('char-count').textContent = text.length - 1; // -1 for trailing newline
+
+    // Update preview
+    const preview = document.getElementById('preview');
+    if (text.trim().length > 0) {
+        preview.innerHTML = quill.root.innerHTML;
+    } else {
+        preview.innerHTML = '<p class="text-muted text-center">Превью появится после ввода текста</p>';
+    }
+}
+
+quill.on('text-change', updateCharCount);
+
+// AI Generation
+document.getElementById('generate-btn').addEventListener('click', async function() {
+    const topic = document.getElementById('topic').value;
+    const specialty = document.getElementById('specialty').value;
+
+    if (!topic || !specialty) {
+        alert('Выберите специализацию и введите тему для генерации');
+        return;
+    }
+
+    const btn = this;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Генерирую...';
+
+    try {
+        const response = await fetch('/posts/generate', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ topic, specialty })
+        });
+
+        const result = await response.json();
+
+        if (result.error) {
+            alert('Ошибка: ' + result.error);
+        } else {
+            // Set content as plain text
+            quill.setText(result.content);
+            updateCharCount();
+            alert('Контент успешно сгенерирован! Можете отредактировать при необходимости.');
+        }
+    } catch (error) {
+        alert('Ошибка генерации: ' + error.message);
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-robot"></i> Генерировать с AI';
+    }
+});
+
+// Form submission - convert Quill content to hidden input
+document.getElementById('create-post-form').addEventListener('submit', function(e) {
+    const text = quill.getText().trim();
+
+    if (text.length === 0) {
+        e.preventDefault();
+        alert('Введите текст поста');
+        return false;
+    }
+
+    if (text.length > 4096) {
+        e.preventDefault();
+        alert('Текст слишком длинный (максимум 4096 символов)');
+        return false;
+    }
+
+    // Set plain text to hidden field
+    document.getElementById('post-text').value = text;
+});
+
+// Set default scheduled time (1 hour from now)
+window.addEventListener('DOMContentLoaded', function() {
+    const now = new Date();
+    now.setHours(now.getHours() + 1);
+    now.setMinutes(0);
+    const formatted = now.toISOString().slice(0, 16);
+    document.getElementById('scheduled_time').value = formatted;
+});
+</script>
+{% endblock %}

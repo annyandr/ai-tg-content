@@ -1,0 +1,173 @@
+{% extends "base.html" %}
+
+{% block title %}Посты - Medical SMM Bot{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1><i class="bi bi-file-text"></i> Посты</h1>
+    <a href="{{ url_for('posts.create_post') }}" class="btn btn-primary">
+        <i class="bi bi-plus-circle"></i> Создать пост
+    </a>
+</div>
+
+<!-- Statistics -->
+{% if stats %}
+<div class="row mb-4">
+    <div class="col-md-2">
+        <div class="card">
+            <div class="card-body text-center">
+                <h6 class="text-muted">Всего</h6>
+                <h4>{{ stats.total }}</h4>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-2">
+        <div class="card">
+            <div class="card-body text-center">
+                <h6 class="text-muted">Выполнено</h6>
+                <h4 class="text-success">{{ stats.completed }}</h4>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-2">
+        <div class="card">
+            <div class="card-body text-center">
+                <h6 class="text-muted">Запланировано</h6>
+                <h4 class="text-warning">{{ stats.scheduled }}</h4>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-2">
+        <div class="card">
+            <div class="card-body text-center">
+                <h6 class="text-muted">Ошибки</h6>
+                <h4 class="text-danger">{{ stats.failed }}</h4>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-body text-center">
+                <h6 class="text-muted">Success Rate</h6>
+                <h4>{{ "%.1f"|format(stats.success_rate) }}%</h4>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Filters -->
+<div class="card mb-4">
+    <div class="card-body">
+        <div class="btn-group" role="group">
+            <a href="{{ url_for('posts.list_posts', status='all') }}"
+               class="btn btn-sm btn-outline-primary {% if current_status == 'all' %}active{% endif %}">
+                Все
+            </a>
+            <a href="{{ url_for('posts.list_posts', status='scheduled') }}"
+               class="btn btn-sm btn-outline-warning {% if current_status == 'scheduled' %}active{% endif %}">
+                Запланированные
+            </a>
+            <a href="{{ url_for('posts.list_posts', status='processing') }}"
+               class="btn btn-sm btn-outline-info {% if current_status == 'processing' %}active{% endif %}">
+                В процессе
+            </a>
+            <a href="{{ url_for('posts.list_posts', status='completed') }}"
+               class="btn btn-sm btn-outline-success {% if current_status == 'completed' %}active{% endif %}">
+                Выполнено
+            </a>
+            <a href="{{ url_for('posts.list_posts', status='failed') }}"
+               class="btn btn-sm btn-outline-danger {% if current_status == 'failed' %}active{% endif %}">
+                Ошибки
+            </a>
+        </div>
+    </div>
+</div>
+
+<!-- Tasks List -->
+<div class="card">
+    <div class="card-body">
+        {% if tasks %}
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Канал</th>
+                        <th>Превью</th>
+                        <th>Время публикации</th>
+                        <th>Статус</th>
+                        <th>Действия</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for task in tasks %}
+                    <tr>
+                        <td><code>{{ task.task_id[:8] }}</code></td>
+                        <td>{{ task.channel_id }}</td>
+                        <td>
+                            <div style="max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                                {{ task.text[:100] }}{% if task.text|length > 100 %}...{% endif %}
+                            </div>
+                        </td>
+                        <td>{{ task.scheduled_time }}</td>
+                        <td>
+                            {% if task.status == 'completed' %}
+                                <span class="badge bg-success">Выполнено</span>
+                            {% elif task.status == 'failed' %}
+                                <span class="badge bg-danger">Ошибка</span>
+                            {% elif task.status == 'processing' %}
+                                <span class="badge bg-info">В процессе</span>
+                            {% elif task.status == 'scheduled' %}
+                                <span class="badge bg-warning">Запланировано</span>
+                            {% elif task.status == 'cancelled' %}
+                                <span class="badge bg-secondary">Отменено</span>
+                            {% else %}
+                                <span class="badge bg-secondary">{{ task.status }}</span>
+                            {% endif %}
+
+                            {% if task.retry_count > 0 %}
+                                <small class="text-muted">(retry: {{ task.retry_count }})</small>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if task.status in ['scheduled', 'pending'] %}
+                            <form method="POST" action="{{ url_for('posts.cancel_post', task_id=task.task_id) }}" style="display: inline;">
+                                <button type="submit" class="btn btn-sm btn-danger"
+                                        onclick="return confirm('Отменить пост?')">
+                                    <i class="bi bi-x-circle"></i>
+                                </button>
+                            </form>
+                            {% endif %}
+
+                            {% if task.status == 'failed' %}
+                                <button class="btn btn-sm btn-info" onclick="showError('{{ task.error_message }}')">
+                                    <i class="bi bi-info-circle"></i>
+                                </button>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="text-center py-5">
+            <i class="bi bi-inbox" style="font-size: 4rem; color: #ccc;"></i>
+            <p class="text-muted mt-3">Нет постов</p>
+            <a href="{{ url_for('posts.create_post') }}" class="btn btn-primary">
+                <i class="bi bi-plus-circle"></i> Создать первый пост
+            </a>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+function showError(message) {
+    alert('Ошибка: ' + message);
+}
+</script>
+{% endblock %}
