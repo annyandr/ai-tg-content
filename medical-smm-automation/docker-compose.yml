@@ -1,0 +1,66 @@
+version: '3.8'
+
+services:
+  medical-smm-bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: medical-smm-bot
+    restart: unless-stopped
+    
+    # Переменные окружения из .env файла
+    env_file:
+      - .env
+    
+    # Переменные окружения (можно переопределить)
+    environment:
+      - PYTHONUNBUFFERED=1
+      - TZ=Europe/Moscow
+    
+    # Volumes для постоянного хранения данных
+    volumes:
+      # База данных и конфигурация
+      - ./data:/app/data
+      # Логи
+      - ./logs:/app/logs
+      # Кэш Python (опционально)
+      - bot-cache:/home/botuser/.cache
+    
+    # Сетевые настройки
+    networks:
+      - bot-network
+    
+    # Ограничения ресурсов
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+    
+    # Логирование
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    
+    # Healthcheck
+    healthcheck:
+      test: ["CMD", "python", "-c", "import sys; sys.exit(0)"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+# Volumes
+volumes:
+  bot-cache:
+    driver: local
+
+# Networks
+networks:
+  bot-network:
+    driver: bridge
