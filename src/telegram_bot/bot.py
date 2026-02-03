@@ -349,7 +349,19 @@ class MedicalTelegramBot:
     async def get_upcoming_posts(self, limit: int = 10) -> List[PublishTask]:
         """Получить список запланированных постов"""
         return self.task_queue.get_upcoming_tasks(limit=limit)
-    
+
+    async def add_task(self, task: PublishTask) -> str:
+        """
+        Добавить задачу в очередь публикации
+
+        Args:
+            task: Задача публикации
+
+        Returns:
+            ID задачи
+        """
+        return await self.task_queue.add_task(task)
+
     async def retry_failed_tasks(self) -> int:
         """Повторить все провалившиеся задачи"""
         failed_tasks = await self.task_queue.get_failed_tasks()
