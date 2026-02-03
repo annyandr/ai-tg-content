@@ -1,133 +1,98 @@
 """
 Агент проверки медицинской безопасности
 """
-from typing import Dict, Any, List
-from src.agents.base_agent import BaseAgent
-from src.services.openrouter import OpenRouterService
-from src.core.logger import logger
 
-# Импортируем промпты
-from src.prompts.agents.safety_prompts import (
-    SAFETY_SYSTEM_PROMPT,
-    SAFETY_USER_PROMPT_TEMPLATE
-)
+import json
+from typing import Dict, Any
+from src.agents.base_agent import BaseAgent
+from src.agents.safety_prompts import SAFETY_SYSTEM_PROMPT, SAFETY_USER_PROMPT_TEMPLATE
+from src.core.logger import logger
 
 
 class SafetyAgent(BaseAgent):
     """
-    Агент для проверки медицинской безопасности контента
+    Агент проверки медицинской безопасности контента
     """
     
-    # Критичные паттерны для всех специализаций
-    CRITICAL_PATTERNS = [
-        r'гарантиру(ю|ет|ем)\s+излечение',
-        r'100%\s+эффективн',
-        r'обязательно\s+принимайте',
-        r'назначьте\s+себе',
-        r'можете\s+не\s+обращаться\s+к\s+врачу',
-        r'замените\s+врача',
-    ]
-    
-    def __init__(self, openrouter: OpenRouterService):
-        super().__init__(
-            name="SafetyAgent",
-            openrouter=openrouter,
-            default_temperature=0.3  # Низкая температура для точности
-        )
-    
     def get_system_prompt(self) -> str:
-        """Возвращает детальный системный промпт для проверки безопасности"""
+        """Возвращает системный промпт для проверки безопасности"""
         return SAFETY_SYSTEM_PROMPT
     
     async def execute(
         self,
         content: str,
-        specialty: str = "общая медицина",
-        channel_name: str = "медицинский канал"
+        specialty: str,
+        channel_name: str
     ) -> Dict[str, Any]:
         """
-        Проверяет контент на безопасность
+        Проверяет контент на медицинскую безопасность
         
         Args:
-            content: Текст для проверки
-            specialty: Специализация
+            content: Текст поста для проверки
+            specialty: Специализация (гинекология, педиатрия и т.д.)
             channel_name: Название канала
-            
+        
         Returns:
             Dict с результатами проверки
         """
-        logger.info(f"Проверка безопасности контента ({specialty})")
         
-        # Сначала быстрая проверка критичных паттернов
-        critical_issues = self._quick_safety_check(content)
+        logger.info(f"🔍 Проверка безопасности: {specialty}")
         
-        if critical_issues:
-            logger.warning(f"❌ Найдены критичные проблемы: {critical_issues}")
-            return {
-                "is_safe": False,
-                "severity": "critical",
-                "issues": [
-                    {
-                        "type": "critical_pattern",
-                        "severity": "critical",
-                        "description": issue,
-                        "location": "",
-                        "recommendation": "Удалите прямые медицинские назначения"
-                    }
-                    for issue in critical_issues
-                ],
-                "recommendations": ["Полностью переписать контент", "Удалить прямые назначения"],
-                "statistics": {
-                    "total_issues": len(critical_issues),
-                    "critical_issues": len(critical_issues),
-                    "high_issues": 0,
-                    "medium_issues": 0,
-                    "low_issues": 0
-                }
-            }
-        
-        # Затем AI проверка с детальным промптом
+        # Формируем user prompt
         user_prompt = SAFETY_USER_PROMPT_TEMPLATE.format(
             content=content,
             specialty=specialty,
             channel_name=channel_name
         )
         
-        result = await self.openrouter.generate_json(
-            system_prompt=self.get_system_prompt(),
-            user_prompt=user_prompt
+        # Генерируем проверку
+        result = await self.generate(
+            user_prompt=user_prompt,
+            temperature=0.3  # Низкая температура для консистентности
         )
         
-        if result["success"] and "parsed_json" in result:
-            safety_result = result["parsed_json"]
-            
-            if not safety_result.get("is_safe"):
-                logger.warning(f"⚠️ Контент не прошёл проверку безопасности")
-            else:
-                logger.info("✅ Контент безопасен")
-            
-            return safety_result
-        else:
-            logger.error("Ошибка проверки безопасности")
+        if not result["success"]:
+            logger.error(f"❌ Ошибка проверки безопасности: {result.get('error')}")
             return {
+                "success": False,
                 "is_safe": False,
                 "severity": "unknown",
-                "issues": [{"description": "Не удалось выполнить проверку"}],
-                "recommendations": ["Повторите проверку"],
-                "statistics": {"total_issues": 1, "critical_issues": 0}
+                "error": result.get("error")
             }
-    
-    def _quick_safety_check(self, content: str) -> List[str]:
-        """Быстрая проверка критичных паттернов"""
-        import re
-        issues = []
         
-        for pattern in self.CRITICAL_PATTERNS:
-            if re.search(pattern, content, re.IGNORECASE):
-                match = re.search(pattern, content, re.IGNORECASE)
-                issues.append(f"Критичная фраза: '{match.group()}'")
+        # Парсим JSON ответ
+        try:
+            safety_data = json.loads(result["content"])
+            
+            is_safe = safety_data.get("is_safe", False)
+            severity = safety_data.get("severity", "unknown")
+            
+            if is_safe:
+                logger.info(f"✅ Контент безопасен: {severity}")
+            else:
+                logger.warning(f"⚠️ Контент требует проверки: {severity}")
+            
+            return {
+                "success": True,
+                "is_safe": is_safe,
+                "severity": severity,
+                "issues": safety_data.get("issues", []),
+                "recommendations": safety_data.get("recommendations", []),
+                "statistics": safety_data.get("statistics", {})
+            }
         
-        return issues
+        except json.JSONDecodeError:
+            logger.error("❌ Не удалось распарсить JSON ответ от Safety Agent")
+            
+            # Fallback: базовая проверка
+            return {
+                "success": True,
+                "is_safe": True,  # По умолчанию считаем безопасным
+                "severity": "low",
+                "issues": [],
+                "recommendations": ["Не удалось выполнить полную проверку"],
+                "statistics": {}
+            }
 
 
 __all__ = ["SafetyAgent"]

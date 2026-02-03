@@ -3,99 +3,116 @@
 """
 
 import aiohttp
-import logging
-from typing import Dict, Optional
-
-logger = logging.getLogger(__name__)
+from typing import Dict, Any, List, Optional
+from src.core.logger import logger
+from src.core.config import config
 
 
 class OpenRouterService:
     """Клиент для OpenRouter API"""
-
-    BASE_URL = "https://openrouter.ai/api/v1"
-
-    def __init__(self, api_key: str, model: str = "anthropic/claude-3.5-sonnet"):
+    
+    def __init__(
+        self,
+        api_key: str,
+        base_url: str = "https://openrouter.ai/api/v1"
+    ):
         self.api_key = api_key
-        self.model = model
+        self.base_url = base_url
         self.session: Optional[aiohttp.ClientSession] = None
-
-    async def _get_session(self) -> aiohttp.ClientSession:
-        """Получить или создать HTTP сессию"""
-        if self.session is None or self.session.closed:
-            self.session = aiohttp.ClientSession(
-                headers={
-                    "Authorization": f"Bearer {self.api_key}",
-                    "Content-Type": "application/json"
-                }
-            )
-        return self.session
-
+    
+    async def __aenter__(self):
+        self.session = aiohttp.ClientSession()
+        return self
+    
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        if self.session:
+            await self.session.close()
+    
     async def generate(
         self,
-        system_prompt: str,
-        user_prompt: str,
-        temperature: float = 0.7,
-        max_tokens: int = 2500
-    ) -> Dict:
+        messages: List[Dict[str, str]],
+        model: str = None,
+        temperature: float = None,
+        max_tokens: int = None
+    ) -> Dict[str, Any]:
         """
-        Генерация текста через OpenRouter
-
+        Генерация через OpenRouter API
+        
         Args:
-            system_prompt: Системный промпт
-            user_prompt: Запрос пользователя
-            temperature: Температура генерации (0.0-1.0)
-            max_tokens: Максимум токенов в ответе
-
+            messages: Список сообщений [{"role": "user", "content": "..."}]
+            model: Модель (по умолчанию из config)
+            temperature: Температура (по умолчанию из config)
+            max_tokens: Макс токенов (по умолчанию из config)
+        
         Returns:
-            Dict с результатом
+            Dict с результатом {"success": bool, "content": str, "error": str}
         """
+        
+        if not self.session:
+            self.session = aiohttp.ClientSession()
+        
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+            "HTTP-Referer": "https://github.com/annyandr/ai-tg-content",
+        }
+        
+        data = {
+            "model": model or config.DEFAULT_MODEL,
+            "messages": messages,
+            "temperature": temperature or config.TEMPERATURE,
+            "max_tokens": max_tokens or config.MAX_TOKENS
+        }
+        
         try:
-            session = await self._get_session()
-
-            payload = {
-                "model": self.model,
-                "messages": [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ],
-                "temperature": temperature,
-                "max_tokens": max_tokens
-            }
-
-            async with session.post(
-                f"{self.BASE_URL}/chat/completions",
-                json=payload
+            async with self.session.post(
+                f"{self.base_url}/chat/completions",
+                headers=headers,
+                json=data,
+                timeout=aiohttp.ClientTimeout(total=60)
             ) as response:
-
+                
                 if response.status == 200:
-                    data = await response.json()
-                    content = data["choices"][0]["message"]["content"]
-
+                    result = await response.json()
+                    content = result["choices"][0]["message"]["content"]
+                    
+                    logger.info(f"✅ OpenRouter: успешная генерация ({len(content)} символов)")
+                    
                     return {
                         "success": True,
                         "content": content,
-                        "model": self.model,
-                        "tokens": data.get("usage", {})
+                        "model": data["model"],
+                        "usage": result.get("usage", {})
                     }
                 else:
                     error_text = await response.text()
-                    logger.error(f"OpenRouter API error: {response.status} - {error_text}")
-
+                    logger.error(f"❌ OpenRouter error {response.status}: {error_text}")
+                    
                     return {
                         "success": False,
+                        "content": None,
                         "error": f"API error {response.status}: {error_text}"
                     }
-
-        except Exception as e:
-            logger.error(f"Ошибка генерации через OpenRouter: {e}")
+        
+        except asyncio.TimeoutError:
+            logger.error("❌ OpenRouter timeout")
             return {
                 "success": False,
+                "content": None,
+                "error": "Timeout: API не ответил за 60 секунд"
+            }
+        
+        except Exception as e:
+            logger.error(f"❌ OpenRouter exception: {e}")
+            return {
+                "success": False,
+                "content": None,
                 "error": str(e)
             }
-
+    
     async def close(self):
-        """Закрыть сессию"""
-        if self.session and not self.session.closed:
+        """Закрытие сессии"""
+        if self.session:
             await self.session.close()
 
 

@@ -1,0 +1,49 @@
+{
+  "channels": [
+    {
+      "id": "gynecology",
+      "name": "Профессия – гинеколог",
+      "username": "profgynecologist",
+      "specialty": "гинекология",
+      "emoji": "🍑",
+      "link": "https://t.me/profgynecologist",
+      "active": true
+    },
+    {
+      "id": "pediatrics",
+      "name": "Профессия – педиатр",
+      "username": "profpediatrician",
+      "specialty": "педиатрия",
+      "emoji": "👶",
+      "link": "https://t.me/profpediatrician",
+      "active": true
+    },
+    {
+      "id": "endocrinology",
+      "name": "Профессия – эндокринолог",
+      "username": "profendocrinologist",
+      "specialty": "эндокринология",
+      "emoji": "🩺",
+      "link": "https://t.me/profendocrinologist",
+      "active": true
+    },
+    {
+      "id": "therapy",
+      "name": "Профессия – терапевт",
+      "username": "profphysician",
+      "specialty": "терапия",
+      "emoji": "🫀",
+      "link": "https://t.me/profphysician",
+      "active": true
+    },
+    {
+      "id": "dermatology",
+      "name": "Профессия – дерматолог",
+      "username": "profdermatologists",
+      "specialty": "дерматология",
+      "emoji": "🧴",
+      "link": "https://t.me/profdermatologists",
+      "active": true
+    }
+  ]
+}

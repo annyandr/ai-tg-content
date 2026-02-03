@@ -1,0 +1,21 @@
+# Telegram Bot
+aiogram==3.4.1
+
+# HTTP Client
+aiohttp==3.9.3
+
+# Task Scheduling
+apscheduler==3.10.4
+
+# Environment Variables
+python-dotenv==1.0.0
+
+# Database
+sqlalchemy==2.0.25
+aiosqlite==0.19.0
+
+# Data Validation
+pydantic==2.5.0
+
+# Utils
+python-dateutil==2.8.2
