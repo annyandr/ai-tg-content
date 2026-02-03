@@ -36,7 +36,7 @@ class TaskQueue:
         logger.info(f"➕ Задача добавлена: {task.task_id} → {task.channel_id} в {task.scheduled_time}")
         return task.task_id
     
-    async def get_task(self, task_id: str) -> Optional[PublishTask]:
+    def get_task(self, task_id: str) -> Optional[PublishTask]:
         """Получить задачу по ID"""
         return (
             self.tasks.get(task_id) or
@@ -66,7 +66,7 @@ class TaskQueue:
         
         return ready_tasks
     
-    async def get_failed_tasks(self) -> List[PublishTask]:
+    def get_failed_tasks(self) -> List[PublishTask]:
         """Получить все провалившиеся задачи"""
         return list(self.failed_tasks.values())
     
@@ -168,12 +168,26 @@ class TaskQueue:
     
     def get_stats(self) -> Dict:
         """Получить статистику очереди"""
+        pending = len([t for t in self.tasks.values() if t.status == TaskStatus.PENDING])
+        scheduled = len([t for t in self.tasks.values() if t.status == TaskStatus.SCHEDULED])
+        processing = len([t for t in self.tasks.values() if t.status == TaskStatus.PROCESSING])
+        cancelled = len([t for t in self.tasks.values() if t.status == TaskStatus.CANCELLED])
+        completed = len(self.completed_tasks)
+        failed = len(self.failed_tasks)
+
+        # Calculate total and success rate
+        total = len(self.tasks) + completed + failed
+        success_rate = (completed / (completed + failed) * 100) if (completed + failed) > 0 else 0.0
+
         return {
-            "active_tasks": len(self.tasks),
-            "completed": len(self.completed_tasks),
-            "failed": len(self.failed_tasks),
-            "pending": len([t for t in self.tasks.values() if t.status == TaskStatus.PENDING]),
-            "scheduled": len([t for t in self.tasks.values() if t.status == TaskStatus.SCHEDULED])
+            "total": total,
+            "pending": pending,
+            "scheduled": scheduled,
+            "processing": processing,
+            "completed": completed,
+            "failed": failed,
+            "cancelled": cancelled,
+            "success_rate": success_rate
         }
     
     def get_upcoming_tasks(self, limit: int = 10) -> List[PublishTask]:

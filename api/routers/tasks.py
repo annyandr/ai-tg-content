@@ -49,7 +49,7 @@ async def list_tasks(
     """Get list of tasks with optional filtering"""
     try:
         if status == "failed":
-            tasks = await queue.get_failed_tasks()
+            tasks = queue.get_failed_tasks()
         elif status == "upcoming":
             tasks = queue.get_upcoming_tasks(limit=limit)
         elif status:
