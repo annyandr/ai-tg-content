@@ -9,6 +9,9 @@ document.addEventListener('DOMContentLoaded', function() {
             bsAlert.close();
         }, 5000);
     });
+
+    // Format all datetime elements
+    formatAllDates();
 });
 
 // Confirm dangerous actions
@@ -22,15 +25,27 @@ document.querySelectorAll('[data-confirm]').forEach(function(element) {
     });
 });
 
-// Format dates to local timezone
+// Format dates to Russian locale with 24-hour format
 function formatDate(dateString) {
+    if (!dateString) return '-';
     const date = new Date(dateString);
+    if (isNaN(date)) return dateString;
+
     return date.toLocaleString('ru-RU', {
         year: 'numeric',
         month: '2-digit',
         day: '2-digit',
         hour: '2-digit',
-        minute: '2-digit'
+        minute: '2-digit',
+        hour12: false
+    });
+}
+
+// Format all dates on page
+function formatAllDates() {
+    document.querySelectorAll('[data-date]').forEach(function(element) {
+        const dateString = element.getAttribute('data-date');
+        element.textContent = formatDate(dateString);
     });
 }
 

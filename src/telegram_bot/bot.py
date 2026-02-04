@@ -16,6 +16,7 @@ from src.telegram_bot.models import PublishTask, TaskStatus, ButtonModel
 from src.telegram_bot.task_queue import TaskQueue
 from src.core.logger import logger
 from src.core.exceptions import PublishError
+from src.utils.text_formatter import markdown_to_telegram_html
 
 
 class MedicalTelegramBot:
@@ -112,16 +113,22 @@ class MedicalTelegramBot:
     async def _publish_task(self, task: PublishTask):
         """
         Публикация одной задачи
-        
+
         Args:
             task: Задача публикации
         """
         logger.info(f"📤 Публикую задачу {task.task_id} в {task.channel_id}")
-        
+
         # Обновляем статус
         task.status = TaskStatus.PROCESSING
         await self.task_queue.update_task(task)
-        
+
+        # Конвертируем Markdown в HTML для Telegram (если parse_mode = HTML)
+        text_to_send = task.text
+        if task.parse_mode == "HTML" and task.text:
+            text_to_send = markdown_to_telegram_html(task.text)
+            logger.debug(f"Конвертирован Markdown → HTML для задачи {task.task_id}")
+
         try:
             # Формируем клавиатуру (если есть кнопки)
             reply_markup = None
@@ -143,39 +150,39 @@ class MedicalTelegramBot:
                 message = await self.bot.send_photo(
                     chat_id=task.channel_id,
                     photo=task.photo_url,
-                    caption=task.text,
+                    caption=text_to_send,
                     parse_mode=task.parse_mode,
                     reply_markup=reply_markup,
                     disable_notification=task.disable_notification
                 )
-            
+
             elif task.video_url:
                 # Пост с видео
                 message = await self.bot.send_video(
                     chat_id=task.channel_id,
                     video=task.video_url,
-                    caption=task.text,
+                    caption=text_to_send,
                     parse_mode=task.parse_mode,
                     reply_markup=reply_markup,
                     disable_notification=task.disable_notification
                 )
-            
+
             elif task.document_url:
                 # Пост с документом
                 message = await self.bot.send_document(
                     chat_id=task.channel_id,
                     document=task.document_url,
-                    caption=task.text,
+                    caption=text_to_send,
                     parse_mode=task.parse_mode,
                     reply_markup=reply_markup,
                     disable_notification=task.disable_notification
                 )
-            
+
             else:
                 # Текстовый пост
                 message = await self.bot.send_message(
                     chat_id=task.channel_id,
-                    text=task.text,
+                    text=text_to_send,
                     parse_mode=task.parse_mode,
                     reply_markup=reply_markup,
                     disable_web_page_preview=task.disable_web_page_preview,

@@ -69,7 +69,7 @@
                                 <tr>
                                     <td><code>{{ task.task_id[:8] }}</code></td>
                                     <td>{{ task.channel_id }}</td>
-                                    <td>{{ task.scheduled_time }}</td>
+                                    <td><span data-date="{{ task.scheduled_time }}">{{ task.scheduled_time }}</span></td>
                                     <td>
                                         {% if task.status == 'completed' %}
                                             <span class="badge bg-success">Выполнено</span>

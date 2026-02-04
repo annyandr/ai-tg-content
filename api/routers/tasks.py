@@ -9,6 +9,7 @@ from api.dependencies import get_telegram_bot, get_task_queue
 from src.telegram_bot.bot import MedicalTelegramBot
 from src.telegram_bot.task_queue import TaskQueue
 from src.telegram_bot.models import TaskStatus
+from src.core.logger import logger
 
 router = APIRouter(prefix="/api/v1/tasks", tags=["tasks"])
 
@@ -32,11 +33,16 @@ async def create_task(
         task = queue.get_task(task_id)
 
         if not task:
+            logger.error(f"Failed to retrieve task {task_id} after creation")
             raise HTTPException(status_code=500, detail="Failed to retrieve created task")
 
-        return TaskResponse.from_publish_task(task)
+        response = TaskResponse.from_publish_task(task)
+        return response
 
+    except HTTPException:
+        raise
     except Exception as e:
+        logger.error(f"Failed to create task: {e}", exc_info=True)
         raise HTTPException(status_code=400, detail=str(e))
 
 
