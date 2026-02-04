@@ -302,7 +302,7 @@ document.getElementById('generate-btn').addEventListener('click', async function
     }
 });
 
-// Convert Quill HTML to simple Markdown (preserve line breaks)
+// Convert Quill HTML to simple Markdown (preserve line breaks and lists)
 function quillToMarkdown() {
     const html = quill.root.innerHTML;
     let markdown = html;
@@ -316,12 +316,31 @@ function quillToMarkdown() {
     // Convert <a> to [text](url)
     markdown = markdown.replace(/<a href="([^"]+)"[^>]*>(.*?)<\/a>/gi, '[$2]($1)');
 
+    // Convert <code> to `code`
+    markdown = markdown.replace(/<code>(.*?)<\/code>/gi, '`$1`');
+
+    // Convert lists
+    // Ordered list items
+    markdown = markdown.replace(/<ol[^>]*>(.*?)<\/ol>/gis, function(match, content) {
+        let counter = 1;
+        return content.replace(/<li[^>]*>(.*?)<\/li>/gi, function(m, item) {
+            return (counter++) + '. ' + item.trim() + '\n';
+        });
+    });
+
+    // Unordered list items
+    markdown = markdown.replace(/<ul[^>]*>(.*?)<\/ul>/gis, function(match, content) {
+        return content.replace(/<li[^>]*>(.*?)<\/li>/gi, function(m, item) {
+            return '- ' + item.trim() + '\n';
+        });
+    });
+
     // Convert <br> to newline
     markdown = markdown.replace(/<br\s*\/?>/gi, '\n');
 
-    // Convert </p> to double newline
-    markdown = markdown.replace(/<\/p>\s*<p>/gi, '\n\n');
-    markdown = markdown.replace(/<\/p>/gi, '\n\n');
+    // Convert </p> to newline (single, not double)
+    markdown = markdown.replace(/<\/p>\s*<p>/gi, '\n');
+    markdown = markdown.replace(/<\/p>/gi, '\n');
     markdown = markdown.replace(/<p[^>]*>/gi, '');
 
     // Remove other HTML tags
@@ -332,7 +351,7 @@ function quillToMarkdown() {
     txt.innerHTML = markdown;
     markdown = txt.value;
 
-    // Clean up excessive newlines
+    // Clean up excessive newlines (max 2 consecutive)
     markdown = markdown.replace(/\n{3,}/g, '\n\n');
 
     return markdown.trim();
@@ -347,20 +366,9 @@ document.getElementById('create-post-form').addEventListener('submit', function(
         contentToSend = markdownContent;
         console.log('Sending original markdown from AI');
     } else {
-        // User typed manually or edited AI content - extract from Quill
-        // Get plain text from Quill, but Quill.getText() removes formatting
-        // So we need to get Delta and reconstruct text with line breaks
-        const delta = quill.getContents();
-        let text = '';
-
-        delta.ops.forEach(op => {
-            if (typeof op.insert === 'string') {
-                text += op.insert;
-            }
-        });
-
-        contentToSend = text.trim();
-        console.log('Extracted from Quill:', contentToSend.substring(0, 100));
+        // User typed manually or edited AI content - convert Quill HTML to markdown
+        contentToSend = quillToMarkdown();
+        console.log('Converted Quill to markdown:', contentToSend.substring(0, 100));
     }
 
     if (contentToSend.length === 0) {

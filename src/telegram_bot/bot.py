@@ -4,7 +4,7 @@ Telegram Bot для публикации постов в каналы
 
 import asyncio
 import ssl
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, List, Dict, Any
 from aiogram import Bot
 from aiogram.client.session.aiohttp import AiohttpSession

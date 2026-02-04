@@ -1,5 +1,5 @@
 """Task-related Pydantic schemas"""
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from typing import Optional
 from datetime import datetime
 from src.telegram_bot.models import PublishTask, TaskStatus
@@ -15,6 +15,12 @@ class TaskCreate(BaseModel):
 
 class TaskResponse(BaseModel):
     """Schema for task response"""
+    model_config = ConfigDict(
+        json_encoders={
+            datetime: lambda v: v.isoformat() if v else None
+        }
+    )
+
     task_id: str
     channel_id: str
     text: str
