@@ -5,8 +5,8 @@
 {% block extra_head %}
 <!-- Quill.js Editor -->
 <link href="https://cdn.quilljs.com/1.3.6/quill.snow.css" rel="stylesheet">
-<!-- Marked.js for Markdown rendering -->
-<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<!-- Marked.js for Markdown rendering (using unpkg for better compatibility) -->
+<script src="https://unpkg.com/marked@4.0.0/marked.min.js"></script>
 {% endblock %}
 
 {% block content %}
@@ -196,18 +196,13 @@ function updateCharCount() {
         if (markdownContent) {
             console.log('Rendering markdown:', markdownContent.substring(0, 100));
             try {
-                // Try using marked (check which API version)
-                if (typeof marked.parse === 'function') {
-                    preview.innerHTML = marked.parse(markdownContent);
-                } else if (typeof marked === 'function') {
-                    preview.innerHTML = marked(markdownContent);
-                } else {
-                    console.error('Marked library not loaded properly');
-                    preview.innerHTML = '<pre>' + markdownContent + '</pre>';
-                }
+                // Marked v4 uses marked() as function
+                preview.innerHTML = marked(markdownContent);
+                console.log('Markdown rendered successfully');
             } catch (e) {
                 console.error('Marked error:', e);
-                preview.innerHTML = '<pre>' + markdownContent + '</pre>';
+                // Fallback: show as preformatted text
+                preview.innerHTML = '<pre style="white-space: pre-wrap;">' + markdownContent + '</pre>';
             }
         } else {
             // Otherwise show Quill HTML
@@ -222,15 +217,11 @@ function updateCharCount() {
 // Also update on photo URL change
 document.getElementById('photo_url').addEventListener('input', updateCharCount);
 
-quill.on('text-change', function() {
-    // If user manually edits, clear markdown flag
-    if (markdownContent) {
-        const currentText = quill.getText().trim();
-        const markdownText = markdownContent.replace(/\*\*/g, '').replace(/\*/g, '').trim();
-        // If text changed significantly, clear markdown
-        if (!currentText.includes(markdownText.substring(0, 50))) {
-            markdownContent = null;
-        }
+quill.on('text-change', function(delta, oldDelta, source) {
+    // Only clear markdown if user manually edited (not programmatic change)
+    if (source === 'user' && markdownContent) {
+        console.log('User edited, clearing markdown flag');
+        markdownContent = null;
     }
     updateCharCount();
 });
@@ -261,11 +252,15 @@ document.getElementById('generate-btn').addEventListener('click', async function
         if (result.error) {
             alert('Ошибка: ' + result.error);
         } else {
-            // Store markdown content
+            console.log('AI generated content:', result.content.substring(0, 100));
+
+            // Store markdown content FIRST
             markdownContent = result.content;
 
-            // Set content as plain text in Quill
+            // Set content as plain text in Quill (this triggers text-change with source='api')
             quill.setText(result.content);
+
+            // Force update preview with markdown
             updateCharCount();
 
             alert('Контент успешно сгенерирован! Можете отредактировать при необходимости.');
@@ -300,6 +295,13 @@ document.getElementById('create-post-form').addEventListener('submit', function(
 
 // Set default scheduled time (1 hour from now)
 window.addEventListener('DOMContentLoaded', function() {
+    // Check if marked library is loaded
+    if (typeof marked === 'undefined') {
+        console.error('Marked library not loaded!');
+    } else {
+        console.log('Marked library loaded successfully, version:', marked.version || 'unknown');
+    }
+
     const now = new Date();
     now.setHours(now.getHours() + 1);
     now.setMinutes(0);
