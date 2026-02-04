@@ -28,12 +28,15 @@ class TaskResponse(BaseModel):
     @classmethod
     def from_publish_task(cls, task: PublishTask) -> "TaskResponse":
         """Convert PublishTask to TaskResponse"""
+        # Handle both TaskStatus enum and string values
+        status_value = task.status.value if hasattr(task.status, 'value') else task.status
+
         return cls(
             task_id=task.task_id,
             channel_id=task.channel_id,
             text=task.text,
             scheduled_time=task.scheduled_time,
-            status=task.status.value,
+            status=status_value,
             photo_url=task.photo_url,
             created_at=task.created_at,
             error_message=task.error_message,
