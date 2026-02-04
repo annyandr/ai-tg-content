@@ -7,6 +7,7 @@ def markdown_to_telegram_html(text: str) -> str:
     Convert simple Markdown to Telegram HTML
 
     Supports:
+    - ***bold+italic*** → <b><i>bold+italic</i></b>
     - **bold** → <b>bold</b>
     - *italic* → <i>italic</i>
     - `code` → <code>code</code>
@@ -20,6 +21,9 @@ def markdown_to_telegram_html(text: str) -> str:
     """
     if not text:
         return text
+
+    # Bold + Italic: ***text*** → <b><i>text</i></b> (обработать СНАЧАЛА!)
+    text = re.sub(r'\*\*\*(.+?)\*\*\*', r'<b><i>\1</i></b>', text)
 
     # Bold: **text** → <b>text</b>
     text = re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', text)
@@ -48,6 +52,9 @@ def strip_markdown(text: str) -> str:
     """
     if not text:
         return text
+
+    # Remove bold+italic (обработать СНАЧАЛА!)
+    text = re.sub(r'\*\*\*(.+?)\*\*\*', r'\1', text)
 
     # Remove bold
     text = re.sub(r'\*\*(.+?)\*\*', r'\1', text)
