@@ -196,8 +196,15 @@ function updateCharCount() {
         if (markdownContent) {
             console.log('Rendering markdown:', markdownContent.substring(0, 100));
             try {
-                // Marked v4 uses marked() as function
-                preview.innerHTML = marked(markdownContent);
+                // Marked v4+ uses marked.parse() method
+                if (typeof marked.parse === 'function') {
+                    preview.innerHTML = marked.parse(markdownContent);
+                } else if (typeof marked === 'function') {
+                    preview.innerHTML = marked(markdownContent);
+                } else {
+                    console.error('Marked library API unknown');
+                    preview.innerHTML = '<pre style="white-space: pre-wrap;">' + markdownContent + '</pre>';
+                }
                 console.log('Markdown rendered successfully');
             } catch (e) {
                 console.error('Marked error:', e);
