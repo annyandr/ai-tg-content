@@ -2,11 +2,17 @@
 from flask import Flask
 from flask_cors import CORS
 from config import Config
+import os
 
 
 def create_app():
     """Create and configure Flask application"""
-    app = Flask(__name__)
+    # Set correct paths for templates and static files
+    app = Flask(
+        __name__,
+        template_folder=os.path.join(os.path.dirname(__file__), 'app', 'templates'),
+        static_folder=os.path.join(os.path.dirname(__file__), 'app', 'static')
+    )
     app.config.from_object(Config)
 
     # Enable CORS
