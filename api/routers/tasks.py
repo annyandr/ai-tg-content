@@ -60,13 +60,28 @@ async def list_tasks(
             tasks = queue.get_upcoming_tasks(limit=limit)
         elif status:
             # Filter by specific status
-            tasks = [
+            # Check in all task stores: active, completed, and failed
+            tasks = []
+
+            # Check active tasks
+            tasks.extend([
                 task for task in queue.tasks.values()
                 if task.status.value == status
-            ]
+            ])
+
+            # Check completed tasks
+            if status == "completed":
+                tasks.extend(queue.completed_tasks.values())
+
+            # Check failed tasks (already handled above, but for consistency)
+            if status == "failed":
+                tasks.extend(queue.failed_tasks.values())
         else:
-            # All tasks
-            tasks = list(queue.tasks.values())
+            # All tasks from all stores
+            tasks = []
+            tasks.extend(queue.tasks.values())
+            tasks.extend(queue.completed_tasks.values())
+            tasks.extend(queue.failed_tasks.values())
 
         # Sort by scheduled_time (most recent first)
         tasks.sort(key=lambda x: x.scheduled_time, reverse=True)
