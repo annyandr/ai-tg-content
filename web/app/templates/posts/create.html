@@ -170,13 +170,14 @@ var quill = new Quill('#editor', {
     placeholder: 'Введите текст поста или сгенерируйте с помощью AI...'
 });
 
-// Store markdown content from AI
+// Store markdown content from AI - THIS IS THE SOURCE OF TRUTH
 let markdownContent = null;
 
 // Update char count and preview
 function updateCharCount() {
-    const text = quill.getText();
-    const charCount = text.length - 1; // -1 for trailing newline
+    // If we have markdown from AI, use it for character count
+    const text = markdownContent || quill.getText();
+    const charCount = text.length - (markdownContent ? 0 : 1); // -1 for trailing newline from Quill
     document.getElementById('char-count').textContent = charCount;
 
     // Check if photo URL is set and text is too long for caption
@@ -197,7 +198,9 @@ function updateCharCount() {
 
     // Update preview
     const preview = document.getElementById('preview');
-    if (text.trim().length > 0) {
+    const displayText = markdownContent || quill.getText();
+
+    if (displayText.trim().length > 0) {
         // If we have markdown from AI, render it
         if (markdownContent) {
             console.log('Rendering markdown:', markdownContent.substring(0, 100));
@@ -209,13 +212,14 @@ function updateCharCount() {
                     preview.innerHTML = marked(markdownContent);
                 } else {
                     console.error('Marked library API unknown');
-                    preview.innerHTML = '<pre style="white-space: pre-wrap;">' + markdownContent + '</pre>';
+                    // Show with preserved line breaks
+                    preview.innerHTML = '<pre style="white-space: pre-wrap; font-family: inherit;">' + markdownContent + '</pre>';
                 }
                 console.log('Markdown rendered successfully');
             } catch (e) {
                 console.error('Marked error:', e);
-                // Fallback: show as preformatted text
-                preview.innerHTML = '<pre style="white-space: pre-wrap;">' + markdownContent + '</pre>';
+                // Fallback: show as preformatted text with line breaks
+                preview.innerHTML = '<pre style="white-space: pre-wrap; font-family: inherit;">' + markdownContent + '</pre>';
             }
         } else {
             // Otherwise show Quill HTML
@@ -231,8 +235,11 @@ function updateCharCount() {
 document.getElementById('photo_url').addEventListener('input', updateCharCount);
 
 quill.on('text-change', function(delta, oldDelta, source) {
-    // Don't clear markdown - we'll send it as is
-    // User edits are just for typos/minor changes
+    // If user manually edits, clear markdown (force conversion from Quill)
+    if (source === 'user' && markdownContent) {
+        console.log('User manually edited, will extract from Quill on submit');
+        markdownContent = null;
+    }
     updateCharCount();
 });
 
@@ -264,17 +271,28 @@ document.getElementById('generate-btn').addEventListener('click', async function
         } else {
             console.log('AI generated content:', result.content.substring(0, 100));
 
-            // Store markdown content
+            // Store markdown content - THIS IS THE SOURCE OF TRUTH
             markdownContent = result.content;
 
-            // Insert as PLAIN TEXT into Quill (don't convert to HTML)
-            // This preserves line breaks and structure
-            quill.setText(result.content);
+            // Insert into Quill preserving line breaks
+            // Convert text to Delta format to preserve \n
+            const lines = result.content.split('\n');
+            const delta = { ops: [] };
+
+            lines.forEach((line, index) => {
+                delta.ops.push({ insert: line });
+                // Add newline after each line except the last
+                if (index < lines.length - 1) {
+                    delta.ops.push({ insert: '\n' });
+                }
+            });
+
+            quill.setContents(delta, 'api');
 
             // Force update preview (preview will show formatted markdown)
             updateCharCount();
 
-            alert('Контент успешно сгенерирован!\n\nВ редакторе - обычный текст.\nВ превью - форматированная версия.\nПри отправке будет правильное форматирование в Telegram.');
+            alert('Контент успешно сгенерирован!\n\n✅ В редакторе: текст с переносами строк\n✅ В превью: форматированная версия\n✅ Можете отредактировать при необходимости');
         }
     } catch (error) {
         alert('Ошибка генерации: ' + error.message);
@@ -322,25 +340,42 @@ function quillToMarkdown() {
 
 // Form submission - send original markdown if unchanged
 document.getElementById('create-post-form').addEventListener('submit', function(e) {
-    const text = quill.getText().trim();
+    let contentToSend;
 
-    if (text.length === 0) {
+    // If we have original markdown from AI, use it
+    if (markdownContent) {
+        contentToSend = markdownContent;
+        console.log('Sending original markdown from AI');
+    } else {
+        // User typed manually or edited AI content - extract from Quill
+        // Get plain text from Quill, but Quill.getText() removes formatting
+        // So we need to get Delta and reconstruct text with line breaks
+        const delta = quill.getContents();
+        let text = '';
+
+        delta.ops.forEach(op => {
+            if (typeof op.insert === 'string') {
+                text += op.insert;
+            }
+        });
+
+        contentToSend = text.trim();
+        console.log('Extracted from Quill:', contentToSend.substring(0, 100));
+    }
+
+    if (contentToSend.length === 0) {
         e.preventDefault();
         alert('Введите текст поста');
         return false;
     }
 
-    if (text.length > 4096) {
+    if (contentToSend.length > 4096) {
         e.preventDefault();
         alert('Текст слишком длинный (максимум 4096 символов)');
         return false;
     }
 
-    // Always send original markdown if we have it from AI
-    // Because Quill stores it as plain text anyway
-    let contentToSend = markdownContent || quillToMarkdown();
-
-    console.log('Sending content:', contentToSend.substring(0, 100));
+    console.log('Final content to send:', contentToSend.substring(0, 100));
     document.getElementById('post-text').value = contentToSend;
 });
 

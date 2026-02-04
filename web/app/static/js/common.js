@@ -26,11 +26,24 @@ document.querySelectorAll('[data-confirm]').forEach(function(element) {
 });
 
 // Format dates to Russian locale with 24-hour format (DD.MM.YYYY HH:MM)
+// Handles both UTC and local datetimes from API
 function formatDate(dateString) {
     if (!dateString) return '-';
-    const date = new Date(dateString);
+
+    let date;
+
+    // If the date string doesn't have timezone info (no Z or +), treat it as UTC
+    if (!dateString.includes('Z') && !dateString.includes('+') && !dateString.includes('-', 10)) {
+        // Naive datetime - assume UTC and convert to local
+        date = new Date(dateString + 'Z');
+    } else {
+        // Already has timezone info
+        date = new Date(dateString);
+    }
+
     if (isNaN(date)) return dateString;
 
+    // Get local time components
     const day = String(date.getDate()).padStart(2, '0');
     const month = String(date.getMonth() + 1).padStart(2, '0');
     const year = date.getFullYear();
