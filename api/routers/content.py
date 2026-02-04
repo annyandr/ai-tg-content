@@ -15,7 +15,8 @@ async def generate_content(
 ):
     """Generate post content using AI"""
     try:
-        result = await generator.generate_from_topic(
+        # generate_from_topic returns a string, not a dict
+        content = await generator.generate_from_topic(
             topic=request.topic,
             specialty=request.specialty,
             post_type=request.post_type,
@@ -23,7 +24,7 @@ async def generate_content(
         )
 
         return ContentGenerateResponse(
-            content=result["content"],
+            content=content,
             specialty=request.specialty,
             post_type=request.post_type,
             topic=request.topic
