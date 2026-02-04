@@ -264,8 +264,22 @@ document.getElementById('generate-btn').addEventListener('click', async function
             // Store markdown content FIRST
             markdownContent = result.content;
 
-            // Set content as plain text in Quill (this triggers text-change with source='api')
-            quill.setText(result.content);
+            // Convert markdown to HTML for Quill
+            let htmlContent = '';
+            if (typeof marked.parse === 'function') {
+                htmlContent = marked.parse(result.content);
+            } else if (typeof marked === 'function') {
+                htmlContent = marked(result.content);
+            }
+
+            // Insert HTML into Quill editor (this will apply formatting)
+            if (htmlContent) {
+                const delta = quill.clipboard.convert(htmlContent);
+                quill.setContents(delta, 'api');
+            } else {
+                // Fallback to plain text
+                quill.setText(result.content);
+            }
 
             // Force update preview with markdown
             updateCharCount();
@@ -280,7 +294,36 @@ document.getElementById('generate-btn').addEventListener('click', async function
     }
 });
 
-// Form submission - convert Quill content to hidden input
+// Convert Quill HTML to simple Markdown
+function quillToMarkdown() {
+    const html = quill.root.innerHTML;
+    let markdown = html;
+
+    // Convert <strong> and <b> to **text**
+    markdown = markdown.replace(/<(strong|b)>(.*?)<\/(strong|b)>/gi, '**$2**');
+
+    // Convert <em> and <i> to *text*
+    markdown = markdown.replace(/<(em|i)>(.*?)<\/(em|i)>/gi, '*$2*');
+
+    // Convert <a> to [text](url)
+    markdown = markdown.replace(/<a href="([^"]+)"[^>]*>(.*?)<\/a>/gi, '[$2]($1)');
+
+    // Remove <p> tags and convert to newlines
+    markdown = markdown.replace(/<\/p><p>/gi, '\n\n');
+    markdown = markdown.replace(/<\/?p>/gi, '');
+
+    // Remove other HTML tags
+    markdown = markdown.replace(/<[^>]+>/g, '');
+
+    // Decode HTML entities
+    const txt = document.createElement('textarea');
+    txt.innerHTML = markdown;
+    markdown = txt.value;
+
+    return markdown.trim();
+}
+
+// Form submission - convert Quill content to markdown/plain text
 document.getElementById('create-post-form').addEventListener('submit', function(e) {
     const text = quill.getText().trim();
 
@@ -296,8 +339,18 @@ document.getElementById('create-post-form').addEventListener('submit', function(
         return false;
     }
 
-    // If we have markdown from AI, send it; otherwise send plain text
-    document.getElementById('post-text').value = markdownContent || text;
+    // Try to preserve markdown formatting
+    let contentToSend;
+    if (markdownContent && quill.getText().trim() === markdownContent.trim()) {
+        // User didn't edit - send original markdown
+        contentToSend = markdownContent;
+    } else {
+        // User edited - convert Quill HTML back to markdown
+        contentToSend = quillToMarkdown();
+        console.log('Converted Quill to markdown:', contentToSend.substring(0, 100));
+    }
+
+    document.getElementById('post-text').value = contentToSend;
 });
 
 // Set default scheduled time (1 hour from now)

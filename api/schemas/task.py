@@ -39,7 +39,7 @@ class TaskResponse(BaseModel):
             status=status_value,
             photo_url=task.photo_url,
             created_at=task.created_at,
-            error_message=task.error_message,
+            error_message=task.last_error,  # PublishTask uses 'last_error', not 'error_message'
             retry_count=task.retry_count
         )
 

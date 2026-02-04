@@ -25,20 +25,19 @@ document.querySelectorAll('[data-confirm]').forEach(function(element) {
     });
 });
 
-// Format dates to Russian locale with 24-hour format
+// Format dates to Russian locale with 24-hour format (DD.MM.YYYY HH:MM)
 function formatDate(dateString) {
     if (!dateString) return '-';
     const date = new Date(dateString);
     if (isNaN(date)) return dateString;
 
-    return date.toLocaleString('ru-RU', {
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: false
-    });
+    const day = String(date.getDate()).padStart(2, '0');
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const year = date.getFullYear();
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+
+    return `${day}.${month}.${year} ${hours}:${minutes}`;
 }
 
 // Format all dates on page
