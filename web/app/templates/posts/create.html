@@ -51,6 +51,9 @@
                         <label for="photo_url" class="form-label">URL фото (опционально)</label>
                         <input type="url" class="form-control" id="photo_url" name="photo_url"
                                placeholder="https://example.com/image.jpg">
+                        <small class="text-muted">
+                            ⚠️ Если текст длиннее 1024 символов, фото и текст будут отправлены отдельными сообщениями
+                        </small>
                     </div>
                 </div>
             </div>
@@ -121,7 +124,8 @@
                     <li>Используйте AI для генерации контента</li>
                     <li>Отредактируйте сгенерированный текст при необходимости</li>
                     <li>Можно добавить фото по URL</li>
-                    <li>Максимальная длина: 4096 символов</li>
+                    <li>Максимальная длина текста: 4096 символов</li>
+                    <li><strong>⚠️ С фото/видео:</strong> если текст >1024 символов, будет отправлен отдельно</li>
                 </ul>
             </div>
         </div>
@@ -166,14 +170,45 @@ let markdownContent = null;
 // Update char count and preview
 function updateCharCount() {
     const text = quill.getText();
-    document.getElementById('char-count').textContent = text.length - 1; // -1 for trailing newline
+    const charCount = text.length - 1; // -1 for trailing newline
+    document.getElementById('char-count').textContent = charCount;
+
+    // Check if photo URL is set and text is too long for caption
+    const photoUrl = document.getElementById('photo_url').value;
+    const charCountElem = document.getElementById('char-count');
+
+    if (photoUrl && charCount > 1024) {
+        charCountElem.style.color = '#dc3545'; // Red
+        charCountElem.parentElement.innerHTML =
+            `<small class="text-danger">⚠️ Символов: ${charCount} / 4096 (слишком длинно для подписи к фото, будет отправлено отдельно)</small>`;
+    } else if (charCount > 4096) {
+        charCountElem.style.color = '#dc3545'; // Red
+    } else {
+        charCountElem.style.color = ''; // Default
+        charCountElem.parentElement.innerHTML =
+            `<small class="text-muted">Символов: <span id="char-count">${charCount}</span> / 4096</small>`;
+    }
 
     // Update preview
     const preview = document.getElementById('preview');
     if (text.trim().length > 0) {
         // If we have markdown from AI, render it
         if (markdownContent) {
-            preview.innerHTML = marked.parse(markdownContent);
+            console.log('Rendering markdown:', markdownContent.substring(0, 100));
+            try {
+                // Try using marked (check which API version)
+                if (typeof marked.parse === 'function') {
+                    preview.innerHTML = marked.parse(markdownContent);
+                } else if (typeof marked === 'function') {
+                    preview.innerHTML = marked(markdownContent);
+                } else {
+                    console.error('Marked library not loaded properly');
+                    preview.innerHTML = '<pre>' + markdownContent + '</pre>';
+                }
+            } catch (e) {
+                console.error('Marked error:', e);
+                preview.innerHTML = '<pre>' + markdownContent + '</pre>';
+            }
         } else {
             // Otherwise show Quill HTML
             preview.innerHTML = quill.root.innerHTML;
@@ -183,6 +218,9 @@ function updateCharCount() {
         markdownContent = null;
     }
 }
+
+// Also update on photo URL change
+document.getElementById('photo_url').addEventListener('input', updateCharCount);
 
 quill.on('text-change', function() {
     // If user manually edits, clear markdown flag

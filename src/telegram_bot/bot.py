@@ -129,6 +129,16 @@ class MedicalTelegramBot:
             text_to_send = markdown_to_telegram_html(task.text)
             logger.debug(f"Конвертирован Markdown → HTML для задачи {task.task_id}")
 
+        # Проверка длины текста для медиа (caption max 1024 символа)
+        CAPTION_MAX_LENGTH = 1024
+        has_media = task.photo_url or task.video_url or task.document_url
+
+        if has_media and len(text_to_send) > CAPTION_MAX_LENGTH:
+            logger.warning(
+                f"⚠️ Текст ({len(text_to_send)} символов) слишком длинный для caption. "
+                f"Отправляю медиа без подписи, затем текст отдельно."
+            )
+
         try:
             # Формируем клавиатуру (если есть кнопки)
             reply_markup = None
@@ -147,36 +157,90 @@ class MedicalTelegramBot:
             
             if task.photo_url:
                 # Пост с фото
-                message = await self.bot.send_photo(
-                    chat_id=task.channel_id,
-                    photo=task.photo_url,
-                    caption=text_to_send,
-                    parse_mode=task.parse_mode,
-                    reply_markup=reply_markup,
-                    disable_notification=task.disable_notification
-                )
+                if len(text_to_send) > CAPTION_MAX_LENGTH:
+                    # Отправляем фото без подписи
+                    await self.bot.send_photo(
+                        chat_id=task.channel_id,
+                        photo=task.photo_url,
+                        disable_notification=task.disable_notification
+                    )
+                    # Затем текст отдельным сообщением
+                    message = await self.bot.send_message(
+                        chat_id=task.channel_id,
+                        text=text_to_send,
+                        parse_mode=task.parse_mode,
+                        reply_markup=reply_markup,
+                        disable_web_page_preview=task.disable_web_page_preview,
+                        disable_notification=task.disable_notification
+                    )
+                else:
+                    # Обычная отправка с caption
+                    message = await self.bot.send_photo(
+                        chat_id=task.channel_id,
+                        photo=task.photo_url,
+                        caption=text_to_send,
+                        parse_mode=task.parse_mode,
+                        reply_markup=reply_markup,
+                        disable_notification=task.disable_notification
+                    )
 
             elif task.video_url:
                 # Пост с видео
-                message = await self.bot.send_video(
-                    chat_id=task.channel_id,
-                    video=task.video_url,
-                    caption=text_to_send,
-                    parse_mode=task.parse_mode,
-                    reply_markup=reply_markup,
-                    disable_notification=task.disable_notification
-                )
+                if len(text_to_send) > CAPTION_MAX_LENGTH:
+                    # Отправляем видео без подписи
+                    await self.bot.send_video(
+                        chat_id=task.channel_id,
+                        video=task.video_url,
+                        disable_notification=task.disable_notification
+                    )
+                    # Затем текст отдельным сообщением
+                    message = await self.bot.send_message(
+                        chat_id=task.channel_id,
+                        text=text_to_send,
+                        parse_mode=task.parse_mode,
+                        reply_markup=reply_markup,
+                        disable_web_page_preview=task.disable_web_page_preview,
+                        disable_notification=task.disable_notification
+                    )
+                else:
+                    # Обычная отправка с caption
+                    message = await self.bot.send_video(
+                        chat_id=task.channel_id,
+                        video=task.video_url,
+                        caption=text_to_send,
+                        parse_mode=task.parse_mode,
+                        reply_markup=reply_markup,
+                        disable_notification=task.disable_notification
+                    )
 
             elif task.document_url:
                 # Пост с документом
-                message = await self.bot.send_document(
-                    chat_id=task.channel_id,
-                    document=task.document_url,
-                    caption=text_to_send,
-                    parse_mode=task.parse_mode,
-                    reply_markup=reply_markup,
-                    disable_notification=task.disable_notification
-                )
+                if len(text_to_send) > CAPTION_MAX_LENGTH:
+                    # Отправляем документ без подписи
+                    await self.bot.send_document(
+                        chat_id=task.channel_id,
+                        document=task.document_url,
+                        disable_notification=task.disable_notification
+                    )
+                    # Затем текст отдельным сообщением
+                    message = await self.bot.send_message(
+                        chat_id=task.channel_id,
+                        text=text_to_send,
+                        parse_mode=task.parse_mode,
+                        reply_markup=reply_markup,
+                        disable_web_page_preview=task.disable_web_page_preview,
+                        disable_notification=task.disable_notification
+                    )
+                else:
+                    # Обычная отправка с caption
+                    message = await self.bot.send_document(
+                        chat_id=task.channel_id,
+                        document=task.document_url,
+                        caption=text_to_send,
+                        parse_mode=task.parse_mode,
+                        reply_markup=reply_markup,
+                        disable_notification=task.disable_notification
+                    )
 
             else:
                 # Текстовый пост
