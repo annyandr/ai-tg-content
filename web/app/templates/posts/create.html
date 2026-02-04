@@ -7,6 +7,10 @@
 <link href="https://cdn.quilljs.com/1.3.6/quill.snow.css" rel="stylesheet">
 <!-- Marked.js for Markdown rendering (using unpkg for better compatibility) -->
 <script src="https://unpkg.com/marked@4.0.0/marked.min.js"></script>
+<!-- Flatpickr for date/time picker with custom format -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+<script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/ru.js"></script>
 {% endblock %}
 
 {% block content %}
@@ -41,9 +45,11 @@
                     <!-- Scheduled Time -->
                     <div class="mb-3">
                         <label for="scheduled_time" class="form-label">Время публикации *</label>
-                        <input type="datetime-local" class="form-control" id="scheduled_time"
-                               name="scheduled_time" required>
-                        <small class="text-muted">Выберите дату и время будущей публикации</small>
+                        <input type="text" class="form-control" id="scheduled_time"
+                               name="scheduled_time" required readonly
+                               placeholder="Выберите дату и время">
+                        <input type="hidden" id="scheduled_time_iso" name="scheduled_time_iso">
+                        <small class="text-muted">Формат: ДД.ММ.ГГГГ ЧЧ:ММ</small>
                     </div>
 
                     <!-- Photo URL -->
@@ -353,7 +359,7 @@ document.getElementById('create-post-form').addEventListener('submit', function(
     document.getElementById('post-text').value = contentToSend;
 });
 
-// Set default scheduled time (1 hour from now)
+// Set default scheduled time (1 hour from now) with Flatpickr
 window.addEventListener('DOMContentLoaded', function() {
     // Check if marked library is loaded
     if (typeof marked === 'undefined') {
@@ -362,11 +368,29 @@ window.addEventListener('DOMContentLoaded', function() {
         console.log('Marked library loaded successfully, version:', marked.version || 'unknown');
     }
 
+    // Initialize Flatpickr for datetime picker
     const now = new Date();
     now.setHours(now.getHours() + 1);
     now.setMinutes(0);
-    const formatted = now.toISOString().slice(0, 16);
-    document.getElementById('scheduled_time').value = formatted;
+    now.setSeconds(0);
+
+    flatpickr("#scheduled_time", {
+        enableTime: true,
+        dateFormat: "d.m.Y H:i",  // Российский формат: ДД.ММ.ГГГГ ЧЧ:ММ
+        time_24hr: true,           // 24-часовой формат
+        locale: "ru",              // Русская локализация
+        defaultDate: now,
+        minDate: "today",
+        onChange: function(selectedDates, dateStr, instance) {
+            // Store ISO format for backend
+            if (selectedDates.length > 0) {
+                document.getElementById('scheduled_time_iso').value = selectedDates[0].toISOString();
+            }
+        }
+    });
+
+    // Set initial ISO value
+    document.getElementById('scheduled_time_iso').value = now.toISOString();
 });
 </script>
 {% endblock %}

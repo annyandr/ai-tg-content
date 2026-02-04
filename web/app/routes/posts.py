@@ -66,10 +66,13 @@ async def create_post():
     # POST - create post
     form_data = request.form
 
+    # Get ISO datetime from hidden field (Flatpickr provides this)
+    scheduled_time_str = form_data.get('scheduled_time_iso') or form_data.get('scheduled_time')
+
     task_data = {
         "channel_id": form_data.get('channel_id'),
         "text": form_data.get('text'),
-        "scheduled_time": form_data.get('scheduled_time'),
+        "scheduled_time": scheduled_time_str,
         "photo_url": form_data.get('photo_url') if form_data.get('photo_url') else None
     }
 
