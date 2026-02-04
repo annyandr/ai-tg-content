@@ -357,10 +357,14 @@ class MedicalTelegramBot:
             ID задачи
         """
         import uuid
-        
+
         # Генерируем ID задачи
         task_id = str(uuid.uuid4())[:8]
-        
+
+        # Remove timezone from scheduled_time if present (for comparison with datetime.now())
+        if scheduled_time.tzinfo is not None:
+            scheduled_time = scheduled_time.replace(tzinfo=None)
+
         # Конвертируем кнопки
         button_models = None
         if buttons:

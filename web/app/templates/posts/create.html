@@ -231,11 +231,8 @@ function updateCharCount() {
 document.getElementById('photo_url').addEventListener('input', updateCharCount);
 
 quill.on('text-change', function(delta, oldDelta, source) {
-    // Only clear markdown if user manually edited (not programmatic change)
-    if (source === 'user' && markdownContent) {
-        console.log('User edited, clearing markdown flag');
-        markdownContent = null;
-    }
+    // Don't clear markdown - we'll send it as is
+    // User edits are just for typos/minor changes
     updateCharCount();
 });
 
@@ -267,30 +264,17 @@ document.getElementById('generate-btn').addEventListener('click', async function
         } else {
             console.log('AI generated content:', result.content.substring(0, 100));
 
-            // Store markdown content FIRST
+            // Store markdown content
             markdownContent = result.content;
 
-            // Convert markdown to HTML for Quill
-            let htmlContent = '';
-            if (typeof marked.parse === 'function') {
-                htmlContent = marked.parse(result.content);
-            } else if (typeof marked === 'function') {
-                htmlContent = marked(result.content);
-            }
+            // Insert as PLAIN TEXT into Quill (don't convert to HTML)
+            // This preserves line breaks and structure
+            quill.setText(result.content);
 
-            // Insert HTML into Quill editor (this will apply formatting)
-            if (htmlContent) {
-                const delta = quill.clipboard.convert(htmlContent);
-                quill.setContents(delta, 'api');
-            } else {
-                // Fallback to plain text
-                quill.setText(result.content);
-            }
-
-            // Force update preview with markdown
+            // Force update preview (preview will show formatted markdown)
             updateCharCount();
 
-            alert('Контент успешно сгенерирован! Можете отредактировать при необходимости.');
+            alert('Контент успешно сгенерирован!\n\nВ редакторе - обычный текст.\nВ превью - форматированная версия.\nПри отправке будет правильное форматирование в Telegram.');
         }
     } catch (error) {
         alert('Ошибка генерации: ' + error.message);
@@ -300,7 +284,7 @@ document.getElementById('generate-btn').addEventListener('click', async function
     }
 });
 
-// Convert Quill HTML to simple Markdown
+// Convert Quill HTML to simple Markdown (preserve line breaks)
 function quillToMarkdown() {
     const html = quill.root.innerHTML;
     let markdown = html;
@@ -314,9 +298,13 @@ function quillToMarkdown() {
     // Convert <a> to [text](url)
     markdown = markdown.replace(/<a href="([^"]+)"[^>]*>(.*?)<\/a>/gi, '[$2]($1)');
 
-    // Remove <p> tags and convert to newlines
-    markdown = markdown.replace(/<\/p><p>/gi, '\n\n');
-    markdown = markdown.replace(/<\/?p>/gi, '');
+    // Convert <br> to newline
+    markdown = markdown.replace(/<br\s*\/?>/gi, '\n');
+
+    // Convert </p> to double newline
+    markdown = markdown.replace(/<\/p>\s*<p>/gi, '\n\n');
+    markdown = markdown.replace(/<\/p>/gi, '\n\n');
+    markdown = markdown.replace(/<p[^>]*>/gi, '');
 
     // Remove other HTML tags
     markdown = markdown.replace(/<[^>]+>/g, '');
@@ -326,10 +314,13 @@ function quillToMarkdown() {
     txt.innerHTML = markdown;
     markdown = txt.value;
 
+    // Clean up excessive newlines
+    markdown = markdown.replace(/\n{3,}/g, '\n\n');
+
     return markdown.trim();
 }
 
-// Form submission - convert Quill content to markdown/plain text
+// Form submission - send original markdown if unchanged
 document.getElementById('create-post-form').addEventListener('submit', function(e) {
     const text = quill.getText().trim();
 
@@ -345,17 +336,11 @@ document.getElementById('create-post-form').addEventListener('submit', function(
         return false;
     }
 
-    // Try to preserve markdown formatting
-    let contentToSend;
-    if (markdownContent && quill.getText().trim() === markdownContent.trim()) {
-        // User didn't edit - send original markdown
-        contentToSend = markdownContent;
-    } else {
-        // User edited - convert Quill HTML back to markdown
-        contentToSend = quillToMarkdown();
-        console.log('Converted Quill to markdown:', contentToSend.substring(0, 100));
-    }
+    // Always send original markdown if we have it from AI
+    // Because Quill stores it as plain text anyway
+    let contentToSend = markdownContent || quillToMarkdown();
 
+    console.log('Sending content:', contentToSend.substring(0, 100));
     document.getElementById('post-text').value = contentToSend;
 });
 
