@@ -1393,11 +1393,23 @@ async def handle_ap_view_post(callback: CallbackQuery):
         [InlineKeyboardButton(text="◀️ Назад к плану", callback_data=f"ap_back_{plan_id}")]
     ])
 
-    await callback.message.edit_text(
-        header + content_display,
-        parse_mode="HTML",
-        reply_markup=keyboard
-    )
+    # Пытаемся отправить как HTML; если контент содержит невалидные теги — экранируем
+    try:
+        await callback.message.edit_text(
+            header + content_display,
+            parse_mode="HTML",
+            reply_markup=keyboard
+        )
+    except Exception:
+        # Контент содержит невалидный HTML — экранируем весь текст поста
+        content_escaped = html.escape(post.content)
+        if len(content_escaped) > max_content_len:
+            content_escaped = content_escaped[:max_content_len] + "\n\n... (обрезано)"
+        await callback.message.edit_text(
+            header + content_escaped,
+            parse_mode="HTML",
+            reply_markup=keyboard
+        )
     await callback.answer()
 
 

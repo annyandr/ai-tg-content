@@ -492,10 +492,12 @@ class AutoPublisher:
         """Формирует текст ленты постов для одобрения"""
         zone_icons = {"green": "🟢", "yellow": "🟡", "red": "🔴"}
 
+        import html as html_mod
+
         header = (
             f"📋 <b>План публикаций на сегодня</b>\n"
             f"🆔 <code>{pending.plan_id}</code>\n"
-            f"💡 <i>{pending.reasoning[:200]}</i>\n\n"
+            f"💡 <i>{html_mod.escape(pending.reasoning[:200])}</i>\n\n"
         )
 
         posts_text = ""
@@ -509,7 +511,6 @@ class AutoPublisher:
             zone_icon = zone_icons.get(post.safety_zone, "⚪")
 
             # Превью контента (первые 80 символов, экранированные)
-            import html as html_mod
             preview = post.content[:80].replace('\n', ' ')
             preview = html_mod.escape(preview)
             if len(post.content) > 80:
@@ -532,8 +533,8 @@ class AutoPublisher:
             posts_text += (
                 f"<b>#{post.index + 1}</b> {zone_icon} {post.channel_emoji} "
                 f"<b>{post.channel_name}</b>\n"
-                f"   ⏰ {post.publish_time} | 📝 {post.post_type}\n"
-                f"   📌 {post.topic}\n"
+                f"   ⏰ {post.publish_time} | 📝 {html_mod.escape(post.post_type)}\n"
+                f"   📌 {html_mod.escape(post.topic)}\n"
                 f"   💬 <i>{preview}</i>"
                 f"{issues_text}\n\n"
             )

@@ -10,5 +10,23 @@
     "name": "Педиатрия",
     "specialty": "pediatrics",
     "prompt_file": "pediatrics_prompts.py"
+  },
+  {
+    "id": "profendocrinologist",
+    "name": "Эндокринология",
+    "specialty": "endocrinology",
+    "prompt_file": "endocrinology_prompts.py"
+  },
+  {
+    "id": "profphysician",
+    "name": "Терапия",
+    "specialty": "therapy",
+    "prompt_file": "therapy_prompts.py"
+  },
+  {
+    "id": "profdermatologists",
+    "name": "Дерматология",
+    "specialty": "dermatology",
+    "prompt_file": "dermatology_prompts.py"
   }
 ]
