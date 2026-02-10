@@ -1362,13 +1362,17 @@ async def handle_ap_view_post(callback: CallbackQuery):
     if post.safety_issues:
         issues_text = "\n⚠️ <b>Замечания:</b>\n"
         for issue in post.safety_issues:
-            issues_text += f"  • {issue}\n"
+            if isinstance(issue, dict):
+                issue = issue.get("description", issue.get("issue", str(issue)))
+            issues_text += f"  • {html.escape(str(issue))}\n"
 
     recs_text = ""
     if post.safety_recommendations:
         recs_text = "\n💡 <b>Рекомендации:</b>\n"
         for rec in post.safety_recommendations[:3]:
-            recs_text += f"  • {rec}\n"
+            if isinstance(rec, dict):
+                rec = rec.get("description", rec.get("recommendation", str(rec)))
+            recs_text += f"  • {html.escape(str(rec))}\n"
 
     header = (
         f"👁️ <b>Пост #{post.index + 1}</b> {zone}\n"

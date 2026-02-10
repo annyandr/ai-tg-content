@@ -517,10 +517,17 @@ class AutoPublisher:
 
             issues_text = ""
             if post.safety_issues:
-                issues_list = ", ".join(post.safety_issues[:2])
+                # safety_issues может содержать str или dict
+                str_issues = []
+                for iss in post.safety_issues[:2]:
+                    if isinstance(iss, dict):
+                        str_issues.append(iss.get("description", iss.get("issue", str(iss))))
+                    else:
+                        str_issues.append(str(iss))
+                issues_list = ", ".join(str_issues)
                 if len(issues_list) > 100:
                     issues_list = issues_list[:100] + "..."
-                issues_text = f"\n   ⚠️ <i>{issues_list}</i>"
+                issues_text = f"\n   ⚠️ <i>{html_mod.escape(issues_list)}</i>"
 
             posts_text += (
                 f"<b>#{post.index + 1}</b> {zone_icon} {post.channel_emoji} "
