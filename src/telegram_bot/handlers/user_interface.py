@@ -31,6 +31,12 @@ class PostCreation(StatesGroup):
     waiting_for_time = State()
 
 
+class AutoPubReview(StatesGroup):
+    """FSM для review автопубликации"""
+    waiting_for_post_number = State()    # Ожидание номера поста (для edit/remove/view)
+    waiting_for_comment = State()        # Ожидание комментария к посту
+
+
 # Глобальные переменные (в production используйте dependency injection)
 generator_agent = None  # Инициализируется в main.py
 safety_agent = None
@@ -825,23 +831,36 @@ async def handle_autopub_menu(callback: CallbackQuery):
     status_emoji = "▶️" if ap_stats["enabled"] else "⏸️"
     status_text = "ВКЛЮЧЕНА" if ap_stats["enabled"] else "ВЫКЛЮЧЕНА"
 
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+    # Проверяем, есть ли ожидающий план
+    admin_id = callback.from_user.id
+    has_pending = admin_id in auto_publisher.pending_plans
+
+    buttons = [
         [InlineKeyboardButton(
             text="⏸️ Выключить" if ap_stats["enabled"] else "▶️ Включить",
             callback_data="autopub_toggle"
         )],
-        [InlineKeyboardButton(text="🚀 Запустить сейчас", callback_data="autopub_run_now")],
-        [InlineKeyboardButton(text="◀️ Главное меню", callback_data="back_to_menu")]
-    ])
+        [InlineKeyboardButton(text="🚀 Сгенерировать план", callback_data="autopub_run_now")],
+    ]
+
+    if has_pending:
+        pending = auto_publisher.pending_plans[admin_id]
+        buttons.insert(1, [InlineKeyboardButton(
+            text=f"📋 Открыть ожидающий план ({pending.total_active} постов)",
+            callback_data=f"ap_back_{pending.plan_id}"
+        )])
+
+    buttons.append([InlineKeyboardButton(text="◀️ Главное меню", callback_data="back_to_menu")])
+    keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
 
     text = (
         f"🤖 <b>Автопубликация</b> {status_emoji} {status_text}\n\n"
-        f"AI-планировщик автоматически:\n"
-        f"• Выбирает темы для постов\n"
-        f"• Определяет оптимальное время\n"
-        f"• Генерирует контент\n"
-        f"• Проверяет безопасность\n"
-        f"• Публикует в каналы\n\n"
+        f"<b>Как это работает:</b>\n"
+        f"1. AI составляет план публикаций\n"
+        f"2. Генерирует контент и проверяет безопасность\n"
+        f"3. Вам приходит лента с зонами 🟢🟡🔴\n"
+        f"4. Вы одобряете / правите / удаляете\n"
+        f"5. Одобренные посты публикуются автоматически\n\n"
         f"📊 <b>Статистика:</b>\n"
         f"• Запусков: {ap_stats['total_runs']}\n"
         f"• Опубликовано: {ap_stats['total_published']}\n"
@@ -849,7 +868,10 @@ async def handle_autopub_menu(callback: CallbackQuery):
         f"⏰ Последний запуск: {ap_stats['last_run']}"
     )
 
-    await callback.message.edit_text(text, parse_mode="HTML", reply_markup=keyboard)
+    try:
+        await callback.message.edit_text(text, parse_mode="HTML", reply_markup=keyboard)
+    except Exception:
+        pass
     await callback.answer()
 
 
@@ -962,17 +984,14 @@ async def handle_regenerate(callback: CallbackQuery, state: FSMContext):
 
 
 # ====================================================================================
-# АВТОПУБЛИКАЦИЯ - УПРАВЛЕНИЕ
+# АВТОПУБЛИКАЦИЯ - УПРАВЛЕНИЕ И ОДОБРЕНИЕ
 # ====================================================================================
 
 @router.message(Command("autopublish"))
 async def cmd_autopublish(message: Message):
     """Команда /autopublish - управление автоматической публикацией"""
     if not auto_publisher:
-        await message.answer(
-            "❌ <b>AutoPublisher не инициализирован</b>",
-            parse_mode="HTML"
-        )
+        await message.answer("❌ <b>AutoPublisher не инициализирован</b>", parse_mode="HTML")
         return
 
     ap_stats = auto_publisher.get_stats()
@@ -1018,59 +1037,433 @@ async def handle_autopub_toggle(callback: CallbackQuery):
         auto_publisher.enable()
         await callback.answer("▶️ Автопубликация включена")
 
-    # Обновляем сообщение
-    ap_stats = auto_publisher.get_stats()
-    status_emoji = "▶️" if ap_stats["enabled"] else "⏸️"
-    status_text = "ВКЛЮЧЕНА" if ap_stats["enabled"] else "ВЫКЛЮЧЕНА"
-
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(
-            text="⏸️ Выключить" if ap_stats["enabled"] else "▶️ Включить",
-            callback_data="autopub_toggle"
-        )],
-        [InlineKeyboardButton(text="🚀 Запустить сейчас", callback_data="autopub_run_now")],
-        [InlineKeyboardButton(text="◀️ Главное меню", callback_data="back_to_menu")]
-    ])
-
-    text = (
-        f"🤖 <b>Автопубликация</b> {status_emoji} {status_text}\n\n"
-        f"📊 <b>Статистика:</b>\n"
-        f"• Запусков: {ap_stats['total_runs']}\n"
-        f"• Запланировано: {ap_stats['total_planned']}\n"
-        f"• Сгенерировано: {ap_stats['total_generated']}\n"
-        f"• Опубликовано: {ap_stats['total_published']}\n"
-        f"• Отклонено (безопасность): {ap_stats['total_safety_rejected']}\n"
-        f"• Ошибки: {ap_stats['total_failed']}\n\n"
-        f"⏰ Последний запуск: {ap_stats['last_run']}\n"
-        f"📋 Постов в последнем плане: {ap_stats['last_plan_posts']}"
-    )
-
-    try:
-        await callback.message.edit_text(text, parse_mode="HTML", reply_markup=keyboard)
-    except Exception:
-        pass
+    # Обновляем сообщение — вызываем тот же autopub_menu
+    await handle_autopub_menu(callback)
 
 
 @router.callback_query(F.data == "autopub_run_now")
 async def handle_autopub_run_now(callback: CallbackQuery):
-    """Запуск автопубликации вручную прямо сейчас"""
+    """Запуск подготовки плана: генерация -> проверка -> лента для одобрения"""
     if not auto_publisher:
         await callback.answer("❌ AutoPublisher не инициализирован", show_alert=True)
         return
 
-    await callback.answer("🚀 Запускаю автопубликацию...")
+    await callback.answer("🚀 Запускаю подготовку плана...")
 
     await callback.message.edit_text(
-        "🤖 <b>Автопубликация запущена!</b>\n\n"
-        "⏳ AI-планировщик составляет план...\n"
-        "Генерация и публикация выполняются в фоне.\n\n"
-        "Вы получите уведомление по завершении.",
+        "🤖 <b>Подготовка плана публикаций...</b>\n\n"
+        "⏳ AI-планировщик составляет план\n"
+        "⏳ Генерация контента для каждого поста\n"
+        "⏳ Проверка безопасности\n\n"
+        "Это займёт 1-3 минуты. Вы получите ленту постов для одобрения.",
         parse_mode="HTML"
     )
 
-    # Запускаем в фоне, чтобы не блокировать ответ пользователю
+    # Запускаем в фоне
     import asyncio
     asyncio.create_task(auto_publisher.run_daily_cycle())
+
+
+# --- Одобрение плана ---
+
+@router.callback_query(F.data.startswith("ap_approve_"))
+async def handle_ap_approve(callback: CallbackQuery):
+    """Одобрить все посты и запланировать публикацию"""
+    plan_id = callback.data.replace("ap_approve_", "")
+    admin_id = callback.from_user.id
+
+    pending = auto_publisher.pending_plans.get(admin_id)
+    if not pending or pending.plan_id != plan_id:
+        await callback.answer("❌ План не найден или устарел", show_alert=True)
+        return
+
+    await callback.answer("✅ Одобряю и планирую...")
+
+    result = await auto_publisher.approve_and_schedule(admin_id)
+
+    if result["success"]:
+        await callback.message.edit_text(
+            f"✅ <b>План одобрен и запланирован!</b>\n\n"
+            f"📋 Запланировано: {result['scheduled_count']} постов\n"
+            f"❌ Ошибки: {result['failed_count']}\n\n"
+            f"Посты будут автоматически опубликованы в указанное время.",
+            parse_mode="HTML"
+        )
+    else:
+        await callback.message.edit_text(
+            f"❌ <b>Ошибка:</b> {result.get('error')}",
+            parse_mode="HTML"
+        )
+
+
+# --- Редактирование поста (комментарий) ---
+
+@router.callback_query(F.data.startswith("ap_edit_"))
+async def handle_ap_edit_start(callback: CallbackQuery, state: FSMContext):
+    """Начало редактирования — запрос номера поста"""
+    plan_id = callback.data.replace("ap_edit_", "")
+    admin_id = callback.from_user.id
+
+    pending = auto_publisher.pending_plans.get(admin_id)
+    if not pending or pending.plan_id != plan_id:
+        await callback.answer("❌ План не найден", show_alert=True)
+        return
+
+    active = pending.active_posts
+    if not active:
+        await callback.answer("Нет активных постов", show_alert=True)
+        return
+
+    # Формируем кнопки с номерами постов
+    buttons = []
+    for post in active:
+        zone_icons = {"green": "🟢", "yellow": "🟡", "red": "🔴"}
+        zone = zone_icons.get(post.safety_zone, "⚪")
+        btn_text = f"#{post.index + 1} {zone} {post.channel_emoji} {post.topic[:30]}"
+        buttons.append([InlineKeyboardButton(
+            text=btn_text,
+            callback_data=f"ap_editpost_{plan_id}_{post.index}"
+        )])
+    buttons.append([InlineKeyboardButton(text="◀️ Назад к плану", callback_data=f"ap_back_{plan_id}")])
+
+    keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
+
+    await callback.message.edit_text(
+        "✏️ <b>Какой пост отредактировать?</b>\n\n"
+        "Выберите пост, к которому хотите дать комментарий:",
+        parse_mode="HTML",
+        reply_markup=keyboard
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data.regexp(r"^ap_editpost_[a-f0-9]+_\d+$"))
+async def handle_ap_edit_post_selected(callback: CallbackQuery, state: FSMContext):
+    """Пост выбран для редактирования — запрос комментария"""
+    parts = callback.data.split("_")
+    plan_id = parts[2]
+    post_index = int(parts[3])
+    admin_id = callback.from_user.id
+
+    pending = auto_publisher.pending_plans.get(admin_id)
+    if not pending or pending.plan_id != plan_id:
+        await callback.answer("❌ План не найден", show_alert=True)
+        return
+
+    if post_index >= len(pending.posts) or pending.posts[post_index].removed:
+        await callback.answer("❌ Пост не найден", show_alert=True)
+        return
+
+    post = pending.posts[post_index]
+
+    await state.update_data(ap_plan_id=plan_id, ap_post_index=post_index)
+    await state.set_state(AutoPubReview.waiting_for_comment)
+
+    await callback.message.edit_text(
+        f"✏️ <b>Редактирование поста #{post.index + 1}</b>\n\n"
+        f"{post.channel_emoji} <b>{post.channel_name}</b>\n"
+        f"📌 {post.topic}\n\n"
+        f"Напишите комментарий: что исправить в этом посте?\n\n"
+        f"<i>Например: «Добавь ссылку на исследование», "
+        f"«Убери упоминание конкретных препаратов», "
+        f"«Сделай более практичным для врачей»</i>",
+        parse_mode="HTML"
+    )
+    await callback.answer()
+
+
+@router.message(AutoPubReview.waiting_for_comment)
+async def handle_ap_edit_comment(message: Message, state: FSMContext):
+    """Получен комментарий — перегенерация поста"""
+    data = await state.get_data()
+    plan_id = data.get("ap_plan_id")
+    post_index = data.get("ap_post_index")
+    admin_id = message.from_user.id
+    comment = message.text
+
+    await state.clear()
+
+    progress = await message.answer(
+        "🔄 <b>Перегенерирую пост с учётом комментария...</b>\n\n"
+        f"💬 <i>{comment[:200]}</i>",
+        parse_mode="HTML"
+    )
+
+    success = await auto_publisher.regenerate_post(plan_id, post_index, comment, admin_id)
+
+    pending = auto_publisher.pending_plans.get(admin_id)
+
+    if success and pending:
+        # Отправляем обновлённую ленту
+        try:
+            await progress.delete()
+        except Exception:
+            pass
+
+        feed_text = auto_publisher._build_feed_text(pending)
+
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(
+                text=f"✅ Одобрить все ({pending.total_active} постов)",
+                callback_data=f"ap_approve_{pending.plan_id}"
+            )],
+            [InlineKeyboardButton(
+                text="✏️ Дать комментарий к посту",
+                callback_data=f"ap_edit_{pending.plan_id}"
+            )],
+            [InlineKeyboardButton(
+                text="🗑️ Удалить пост из плана",
+                callback_data=f"ap_remove_{pending.plan_id}"
+            )],
+            [InlineKeyboardButton(
+                text="👁️ Посмотреть пост целиком",
+                callback_data=f"ap_view_{pending.plan_id}"
+            )],
+            [InlineKeyboardButton(
+                text="❌ Отменить весь план",
+                callback_data=f"ap_cancel_{pending.plan_id}"
+            )]
+        ])
+
+        await message.answer(
+            f"✅ <b>Пост #{post_index + 1} обновлён!</b>\n\n" + feed_text,
+            parse_mode="HTML",
+            reply_markup=keyboard
+        )
+    else:
+        await progress.edit_text(
+            "❌ <b>Не удалось перегенерировать пост.</b>\n"
+            "Попробуйте ещё раз через /autopublish",
+            parse_mode="HTML"
+        )
+
+
+# --- Удаление поста из плана ---
+
+@router.callback_query(F.data.startswith("ap_remove_"))
+async def handle_ap_remove_start(callback: CallbackQuery):
+    """Начало удаления — выбор поста"""
+    plan_id = callback.data.replace("ap_remove_", "")
+    admin_id = callback.from_user.id
+
+    pending = auto_publisher.pending_plans.get(admin_id)
+    if not pending or pending.plan_id != plan_id:
+        await callback.answer("❌ План не найден", show_alert=True)
+        return
+
+    active = pending.active_posts
+    if not active:
+        await callback.answer("Нет активных постов", show_alert=True)
+        return
+
+    buttons = []
+    for post in active:
+        zone_icons = {"green": "🟢", "yellow": "🟡", "red": "🔴"}
+        zone = zone_icons.get(post.safety_zone, "⚪")
+        btn_text = f"🗑️ #{post.index + 1} {zone} {post.channel_emoji} {post.topic[:25]}"
+        buttons.append([InlineKeyboardButton(
+            text=btn_text,
+            callback_data=f"ap_rmpost_{plan_id}_{post.index}"
+        )])
+    buttons.append([InlineKeyboardButton(text="◀️ Назад к плану", callback_data=f"ap_back_{plan_id}")])
+
+    keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
+
+    await callback.message.edit_text(
+        "🗑️ <b>Какой пост удалить из плана?</b>",
+        parse_mode="HTML",
+        reply_markup=keyboard
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data.regexp(r"^ap_rmpost_[a-f0-9]+_\d+$"))
+async def handle_ap_remove_post(callback: CallbackQuery):
+    """Удаление конкретного поста"""
+    parts = callback.data.split("_")
+    plan_id = parts[2]
+    post_index = int(parts[3])
+    admin_id = callback.from_user.id
+
+    pending = auto_publisher.pending_plans.get(admin_id)
+    if not pending or pending.plan_id != plan_id:
+        await callback.answer("❌ План не найден", show_alert=True)
+        return
+
+    if post_index < len(pending.posts):
+        pending.posts[post_index].removed = True
+        await callback.answer(f"🗑️ Пост #{post_index + 1} удалён")
+
+    # Обновляем ленту
+    await _refresh_feed(callback, pending)
+
+
+# --- Просмотр поста целиком ---
+
+@router.callback_query(F.data.startswith("ap_view_"))
+async def handle_ap_view_start(callback: CallbackQuery):
+    """Выбор поста для полного просмотра"""
+    plan_id = callback.data.replace("ap_view_", "")
+    admin_id = callback.from_user.id
+
+    pending = auto_publisher.pending_plans.get(admin_id)
+    if not pending or pending.plan_id != plan_id:
+        await callback.answer("❌ План не найден", show_alert=True)
+        return
+
+    active = pending.active_posts
+    if not active:
+        await callback.answer("Нет активных постов", show_alert=True)
+        return
+
+    buttons = []
+    for post in active:
+        zone_icons = {"green": "🟢", "yellow": "🟡", "red": "🔴"}
+        zone = zone_icons.get(post.safety_zone, "⚪")
+        btn_text = f"👁️ #{post.index + 1} {zone} {post.channel_emoji} {post.topic[:25]}"
+        buttons.append([InlineKeyboardButton(
+            text=btn_text,
+            callback_data=f"ap_viewpost_{plan_id}_{post.index}"
+        )])
+    buttons.append([InlineKeyboardButton(text="◀️ Назад к плану", callback_data=f"ap_back_{plan_id}")])
+
+    keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
+
+    await callback.message.edit_text(
+        "👁️ <b>Какой пост посмотреть целиком?</b>",
+        parse_mode="HTML",
+        reply_markup=keyboard
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data.regexp(r"^ap_viewpost_[a-f0-9]+_\d+$"))
+async def handle_ap_view_post(callback: CallbackQuery):
+    """Показ полного текста поста"""
+    parts = callback.data.split("_")
+    plan_id = parts[2]
+    post_index = int(parts[3])
+    admin_id = callback.from_user.id
+
+    pending = auto_publisher.pending_plans.get(admin_id)
+    if not pending or pending.plan_id != plan_id:
+        await callback.answer("❌ План не найден", show_alert=True)
+        return
+
+    if post_index >= len(pending.posts) or pending.posts[post_index].removed:
+        await callback.answer("❌ Пост не найден", show_alert=True)
+        return
+
+    post = pending.posts[post_index]
+    zone_icons = {"green": "🟢", "yellow": "🟡", "red": "🔴"}
+    zone = zone_icons.get(post.safety_zone, "⚪")
+
+    issues_text = ""
+    if post.safety_issues:
+        issues_text = "\n⚠️ <b>Замечания:</b>\n"
+        for issue in post.safety_issues:
+            issues_text += f"  • {issue}\n"
+
+    recs_text = ""
+    if post.safety_recommendations:
+        recs_text = "\n💡 <b>Рекомендации:</b>\n"
+        for rec in post.safety_recommendations[:3]:
+            recs_text += f"  • {rec}\n"
+
+    header = (
+        f"👁️ <b>Пост #{post.index + 1}</b> {zone}\n"
+        f"{post.channel_emoji} <b>{post.channel_name}</b>\n"
+        f"⏰ {post.publish_time} | 📝 {post.post_type}\n"
+        f"📌 {post.topic}\n"
+        f"{issues_text}{recs_text}\n"
+        f"{'─' * 30}\n\n"
+    )
+
+    # Текст поста может быть длинным, обрезаем до лимита Telegram
+    max_content_len = 3500 - len(header)
+    content_display = post.content
+    if len(content_display) > max_content_len:
+        content_display = content_display[:max_content_len] + "\n\n<i>... (обрезано)</i>"
+
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="◀️ Назад к плану", callback_data=f"ap_back_{plan_id}")]
+    ])
+
+    await callback.message.edit_text(
+        header + content_display,
+        parse_mode="HTML",
+        reply_markup=keyboard
+    )
+    await callback.answer()
+
+
+# --- Отмена плана ---
+
+@router.callback_query(F.data.startswith("ap_cancel_"))
+async def handle_ap_cancel(callback: CallbackQuery):
+    """Отмена всего плана"""
+    plan_id = callback.data.replace("ap_cancel_", "")
+    admin_id = callback.from_user.id
+
+    if admin_id in auto_publisher.pending_plans:
+        del auto_publisher.pending_plans[admin_id]
+
+    await callback.message.edit_text(
+        "❌ <b>План отменён.</b>\n\n"
+        "Используйте /autopublish для нового запуска.",
+        parse_mode="HTML"
+    )
+    await callback.answer("План отменён")
+
+
+# --- Назад к ленте ---
+
+@router.callback_query(F.data.startswith("ap_back_"))
+async def handle_ap_back(callback: CallbackQuery):
+    """Возврат к ленте плана"""
+    plan_id = callback.data.replace("ap_back_", "")
+    admin_id = callback.from_user.id
+
+    pending = auto_publisher.pending_plans.get(admin_id)
+    if not pending or pending.plan_id != plan_id:
+        await callback.answer("❌ План не найден", show_alert=True)
+        return
+
+    await _refresh_feed(callback, pending)
+
+
+async def _refresh_feed(callback: CallbackQuery, pending):
+    """Обновляет сообщение с лентой плана"""
+    feed_text = auto_publisher._build_feed_text(pending)
+
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(
+            text=f"✅ Одобрить все ({pending.total_active} постов)",
+            callback_data=f"ap_approve_{pending.plan_id}"
+        )],
+        [InlineKeyboardButton(
+            text="✏️ Дать комментарий к посту",
+            callback_data=f"ap_edit_{pending.plan_id}"
+        )],
+        [InlineKeyboardButton(
+            text="🗑️ Удалить пост из плана",
+            callback_data=f"ap_remove_{pending.plan_id}"
+        )],
+        [InlineKeyboardButton(
+            text="👁️ Посмотреть пост целиком",
+            callback_data=f"ap_view_{pending.plan_id}"
+        )],
+        [InlineKeyboardButton(
+            text="❌ Отменить весь план",
+            callback_data=f"ap_cancel_{pending.plan_id}"
+        )]
+    ])
+
+    try:
+        await callback.message.edit_text(feed_text, parse_mode="HTML", reply_markup=keyboard)
+    except Exception:
+        pass
+    await callback.answer()
 
 
 # ====================================================================================
