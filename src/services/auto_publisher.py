@@ -483,9 +483,16 @@ class AutoPublisher:
             )]
         ])
 
-        msg = await self.telegram_bot.bot.send_message(
-            admin_id, feed_text, parse_mode="HTML", reply_markup=keyboard
-        )
+        try:
+            msg = await self.telegram_bot.bot.send_message(
+                admin_id, feed_text, parse_mode="HTML", reply_markup=keyboard
+            )
+        except Exception as e:
+            logger.warning(f"Ошибка HTML в ленте, пробуем без parse_mode: {e}")
+            import html as html_mod
+            msg = await self.telegram_bot.bot.send_message(
+                admin_id, html_mod.escape(feed_text), reply_markup=keyboard
+            )
         pending.message_id = msg.message_id
 
     def _build_feed_text(self, pending: PendingPlan) -> str:

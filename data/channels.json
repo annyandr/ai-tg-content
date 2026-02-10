@@ -3,30 +3,35 @@
     "id": "-1003748097480",
     "name": "Гинекология",
     "specialty": "gynecology",
-    "prompt_file": "gynecology_prompts.py"
+    "prompt_file": "gynecology_prompts.py",
+    "invite_link": "https://t.me/+qwgGe06ngOZmNDYy"
   },
   {
     "id": "-1003711554131",
     "name": "Педиатрия",
     "specialty": "pediatrics",
-    "prompt_file": "pediatrics_prompts.py"
+    "prompt_file": "pediatrics_prompts.py",
+    "invite_link": "https://t.me/+xTeUs-xsnsBhNjNi"
   },
   {
     "id": "profendocrinologist",
     "name": "Эндокринология",
     "specialty": "endocrinology",
-    "prompt_file": "endocrinology_prompts.py"
+    "prompt_file": "endocrinology_prompts.py",
+    "invite_link": "https://t.me/+UPBs4DiF_UNlNmVi"
   },
   {
     "id": "profphysician",
     "name": "Терапия",
     "specialty": "therapy",
-    "prompt_file": "therapy_prompts.py"
+    "prompt_file": "therapy_prompts.py",
+    "invite_link": "https://t.me/+PRrE2LC-CsQ3YWJi"
   },
   {
     "id": "profdermatologists",
     "name": "Дерматология",
     "specialty": "dermatology",
-    "prompt_file": "dermatology_prompts.py"
+    "prompt_file": "dermatology_prompts.py",
+    "invite_link": "https://t.me/+FEbxZqjz2BFhMjli"
   }
 ]

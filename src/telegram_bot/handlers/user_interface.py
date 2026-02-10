@@ -984,6 +984,109 @@ async def handle_regenerate(callback: CallbackQuery, state: FSMContext):
 
 
 # ====================================================================================
+# ОПРЕДЕЛЕНИЕ ID КАНАЛА
+# ====================================================================================
+
+@router.message(Command("chatid"))
+async def cmd_chatid(message: Message):
+    """
+    Команда /chatid — помощь в определении ID канала.
+    Два режима:
+    1. /chatid @username — резолвит username через Bot API
+    2. Пересланное сообщение из канала — извлекает chat.id
+    """
+    args = message.text.strip().split(maxsplit=1)
+
+    if len(args) > 1:
+        # Пользователь передал username: /chatid @profendocrinologist
+        username = args[1].strip()
+        if not username.startswith("@"):
+            username = f"@{username}"
+
+        try:
+            chat = await telegram_bot.bot.get_chat(username)
+            await message.answer(
+                f"✅ <b>Канал найден</b>\n\n"
+                f"📢 <b>Название:</b> {html.escape(chat.title or 'N/A')}\n"
+                f"🆔 <b>ID:</b> <code>{chat.id}</code>\n"
+                f"👤 <b>Username:</b> @{chat.username or 'нет'}\n\n"
+                f"Используйте ID <code>{chat.id}</code> в channels.json",
+                parse_mode="HTML"
+            )
+        except Exception as e:
+            await message.answer(
+                f"❌ <b>Не удалось найти канал</b> {html.escape(username)}\n\n"
+                f"<code>{html.escape(str(e))}</code>\n\n"
+                f"Убедитесь, что бот добавлен в канал как администратор.",
+                parse_mode="HTML"
+            )
+        return
+
+    # Без аргументов — инструкция
+    await message.answer(
+        "🔍 <b>Определение ID канала</b>\n\n"
+        "<b>Способ 1:</b> Укажите username канала:\n"
+        "<code>/chatid @profendocrinologist</code>\n\n"
+        "<b>Способ 2:</b> Перешлите любое сообщение из канала в этот чат — "
+        "бот автоматически определит ID.\n\n"
+        "<b>Способ 3:</b> /resolve_channels — проверить все настроенные каналы",
+        parse_mode="HTML"
+    )
+
+
+@router.message(Command("resolve_channels"))
+async def cmd_resolve_channels(message: Message):
+    """Резолвит все каналы из SPECIALTY_MAP и показывает их реальные ID"""
+    results = []
+
+    for specialty, config in SPECIALTY_MAP.items():
+        channel = config["channel"]
+        emoji = config["emoji"]
+        name = config["name"]
+
+        try:
+            chat_id = channel if channel.startswith("-") else f"@{channel}"
+            chat = await telegram_bot.bot.get_chat(chat_id)
+            results.append(
+                f"{emoji} <b>{name}</b>\n"
+                f"   Настроено: <code>{channel}</code>\n"
+                f"   Реальный ID: <code>{chat.id}</code>\n"
+                f"   Название: {html.escape(chat.title or 'N/A')}\n"
+                f"   ✅ Бот имеет доступ"
+            )
+        except Exception as e:
+            results.append(
+                f"{emoji} <b>{name}</b>\n"
+                f"   Настроено: <code>{channel}</code>\n"
+                f"   ❌ Нет доступа: {html.escape(str(e)[:80])}"
+            )
+
+    text = "🔍 <b>Проверка каналов</b>\n\n" + "\n\n".join(results)
+    text += (
+        "\n\n<i>Для каналов без доступа: добавьте бота как администратора "
+        "и используйте /chatid @username или перешлите сообщение из канала</i>"
+    )
+
+    await message.answer(text, parse_mode="HTML")
+
+
+@router.message(F.forward_from_chat)
+async def handle_forwarded_from_channel(message: Message):
+    """Обработка пересланного сообщения из канала — показывает ID"""
+    chat = message.forward_from_chat
+    if chat.type in ("channel", "supergroup"):
+        await message.answer(
+            f"📢 <b>Информация о канале</b>\n\n"
+            f"<b>Название:</b> {html.escape(chat.title or 'N/A')}\n"
+            f"🆔 <b>ID:</b> <code>{chat.id}</code>\n"
+            f"👤 <b>Username:</b> @{chat.username or 'нет'}\n\n"
+            f"Используйте этот ID в channels.json и specialty_loader.py:\n"
+            f"<code>\"channel\": \"{chat.id}\"</code>",
+            parse_mode="HTML"
+        )
+
+
+# ====================================================================================
 # АВТОПУБЛИКАЦИЯ - УПРАВЛЕНИЕ И ОДОБРЕНИЕ
 # ====================================================================================
 
@@ -1225,11 +1328,18 @@ async def handle_ap_edit_comment(message: Message, state: FSMContext):
             )]
         ])
 
-        await message.answer(
-            f"✅ <b>Пост #{post_index + 1} обновлён!</b>\n\n" + feed_text,
-            parse_mode="HTML",
-            reply_markup=keyboard
-        )
+        try:
+            await message.answer(
+                f"✅ <b>Пост #{post_index + 1} обновлён!</b>\n\n" + feed_text,
+                parse_mode="HTML",
+                reply_markup=keyboard
+            )
+        except Exception as e:
+            logger.warning(f"Ошибка HTML после перегенерации: {e}")
+            await message.answer(
+                f"Пост #{post_index + 1} обновлён!\n\n" + html.escape(feed_text),
+                reply_markup=keyboard
+            )
     else:
         await progress.edit_text(
             "❌ <b>Не удалось перегенерировать пост.</b>\n"
@@ -1377,8 +1487,8 @@ async def handle_ap_view_post(callback: CallbackQuery):
     header = (
         f"👁️ <b>Пост #{post.index + 1}</b> {zone}\n"
         f"{post.channel_emoji} <b>{post.channel_name}</b>\n"
-        f"⏰ {post.publish_time} | 📝 {post.post_type}\n"
-        f"📌 {post.topic}\n"
+        f"⏰ {post.publish_time} | 📝 {html.escape(post.post_type)}\n"
+        f"📌 {html.escape(post.topic)}\n"
         f"{issues_text}{recs_text}\n"
         f"{'─' * 30}\n\n"
     )
@@ -1477,8 +1587,14 @@ async def _refresh_feed(callback: CallbackQuery, pending):
 
     try:
         await callback.message.edit_text(feed_text, parse_mode="HTML", reply_markup=keyboard)
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning(f"Ошибка HTML в _refresh_feed: {e}")
+        try:
+            await callback.message.edit_text(
+                html.escape(feed_text), reply_markup=keyboard
+            )
+        except Exception:
+            pass
     await callback.answer()
 
 
