@@ -2,6 +2,7 @@
 Сервис для работы с OpenRouter API
 """
 
+import asyncio
 import ssl
 import aiohttp
 from typing import Dict, Any, List, Optional
@@ -35,7 +36,8 @@ class OpenRouterService:
             user_prompt: str,
             model: str = None,
             temperature: float = None,
-            max_tokens: int = None
+            max_tokens: int = None,
+            timeout: int = 120
     ) -> Dict[str, Any]:
         """
         Удобная обертка для генерации с system_prompt и user_prompt
@@ -46,6 +48,7 @@ class OpenRouterService:
             model: Модель (по умолчанию из config)
             temperature: Температура (по умолчанию из config)
             max_tokens: Макс токенов (по умолчанию из config)
+            timeout: Таймаут запроса в секундах
 
         Returns:
             Dict с результатом {"success": bool, "content": str, "error": str}
@@ -60,7 +63,8 @@ class OpenRouterService:
             messages=messages,
             model=model,
             temperature=temperature,
-            max_tokens=max_tokens
+            max_tokens=max_tokens,
+            timeout=timeout
         )
 
     async def generate(
@@ -68,7 +72,8 @@ class OpenRouterService:
         messages: List[Dict[str, str]],
         model: str = None,
         temperature: float = None,
-        max_tokens: int = None
+        max_tokens: int = None,
+        timeout: int = 120
     ) -> Dict[str, Any]:
         """
         Генерация через OpenRouter API
@@ -105,12 +110,14 @@ class OpenRouterService:
             "max_tokens": max_tokens or config.MAX_TOKENS
         }
         
+        logger.info(f"🔄 OpenRouter запрос: model={data['model']}, messages={len(messages)}, max_tokens={data['max_tokens']}")
+
         try:
             async with self.session.post(
                 f"{self.base_url}/chat/completions",
                 headers=headers,
                 json=data,
-                timeout=aiohttp.ClientTimeout(total=60)
+                timeout=aiohttp.ClientTimeout(total=timeout)
             ) as response:
 
                 if response.status == 200:
@@ -145,12 +152,19 @@ class OpenRouterService:
                         "error": f"API error {response.status}: {error_text[:200]}"
                     }
         
-        except Exception as e:
-            logger.error(f"❌ OpenRouter exception: {e}")
+        except asyncio.TimeoutError as e:
+            logger.error(f"❌ OpenRouter timeout ({timeout}с): {repr(e)}", exc_info=True)
             return {
                 "success": False,
                 "content": None,
-                "error": str(e)
+                "error": f"Timeout: запрос к API превысил {timeout}с"
+            }
+        except Exception as e:
+            logger.error(f"❌ OpenRouter exception: type={type(e).__name__}, msg={e}, repr={repr(e)}", exc_info=True)
+            return {
+                "success": False,
+                "content": None,
+                "error": f"{type(e).__name__}: {repr(e)}"
             }
     
     async def close(self):

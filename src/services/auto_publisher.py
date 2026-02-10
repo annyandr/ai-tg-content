@@ -132,7 +132,7 @@ class AutoPublisher:
             )
 
             if not plan_result["success"]:
-                logger.error(f"Ошибка планирования: {plan_result.get('error')}")
+                logger.error(f"Ошибка планирования: {plan_result.get('error', 'unknown')}, full={plan_result}")
                 return None
 
             plan = plan_result["plan"]

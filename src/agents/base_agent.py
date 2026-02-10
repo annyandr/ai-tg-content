@@ -34,16 +34,18 @@ class BaseAgent(ABC):
         self,
         user_prompt: str,
         temperature: float = 0.7,
-        max_tokens: int = 2000
+        max_tokens: int = 2000,
+        timeout: int = 120
     ) -> Dict[str, Any]:
         """
         Генерирует ответ через OpenRouter
-        
+
         Args:
             user_prompt: Пользовательский промпт
             temperature: Температура генерации
             max_tokens: Максимум токенов
-        
+            timeout: Таймаут запроса в секундах
+
         Returns:
             Результат генерации
         """
@@ -51,11 +53,12 @@ class BaseAgent(ABC):
             {"role": "system", "content": self.get_system_prompt()},
             {"role": "user", "content": user_prompt}
         ]
-        
+
         return await self.openrouter.generate(
             messages=messages,
             temperature=temperature,
-            max_tokens=max_tokens
+            max_tokens=max_tokens,
+            timeout=timeout
         )
     
     @abstractmethod

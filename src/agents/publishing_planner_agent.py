@@ -143,8 +143,8 @@ class PublishingPlannerAgent(BaseAgent):
         )
 
         if not result["success"]:
-            logger.error(f"Ошибка создания плана: {result.get('error')}")
-            return {"success": False, "error": result.get("error")}
+            logger.error(f"Ошибка создания плана: {result.get('error', 'unknown')}, full_result={result}")
+            return {"success": False, "error": result.get("error", "unknown")}
 
         # Парсим JSON ответ
         try:
