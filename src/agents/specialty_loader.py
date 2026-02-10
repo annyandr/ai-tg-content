@@ -3,6 +3,8 @@
 Маппинг всех медицинских специализаций
 """
 
+import json
+import os
 from typing import Dict, List, Optional
 
 # Импортируем все промпты
@@ -11,6 +13,7 @@ from src.agents.pediatrics_prompts import PEDIATRICS_SPECIALTY_PROMPT
 from src.agents.endocrinology_prompts import ENDOCRINOLOGY_SPECIALTY_PROMPT
 from src.agents.therapy_prompts import THERAPY_SPECIALTY_PROMPT
 from src.agents.dermatology_prompts import DERMATOLOGY_SPECIALTY_PROMPT
+from src.core.logger import logger
 
 
 # Маппинг специализаций
@@ -56,6 +59,85 @@ SPECIALTY_MAP: Dict[str, Dict] = {
         "channel_key": "dermatology"
     }
 }
+
+# Файл для сохранения привязок каналов
+CHANNEL_OVERRIDES_PATH = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+    "data", "channel_overrides.json"
+)
+
+
+def _load_channel_overrides():
+    """Загружает сохранённые привязки каналов и применяет к SPECIALTY_MAP"""
+    if not os.path.exists(CHANNEL_OVERRIDES_PATH):
+        return
+
+    try:
+        with open(CHANNEL_OVERRIDES_PATH, "r", encoding="utf-8") as f:
+            overrides = json.load(f)
+
+        for specialty, override in overrides.items():
+            if specialty in SPECIALTY_MAP:
+                if "channel" in override:
+                    SPECIALTY_MAP[specialty]["channel"] = override["channel"]
+                if "link" in override:
+                    SPECIALTY_MAP[specialty]["link"] = override["link"]
+                logger.info(
+                    f"📡 Канал для {SPECIALTY_MAP[specialty]['name']}: "
+                    f"{override.get('channel', '?')}"
+                )
+
+    except Exception as e:
+        logger.error(f"Ошибка загрузки channel_overrides.json: {e}")
+
+
+def update_channel_for_specialty(specialty: str, channel_id: str, link: str = None) -> bool:
+    """
+    Обновляет ID канала для специализации в памяти и сохраняет на диск.
+
+    Args:
+        specialty: Ключ специализации (гинекология, педиатрия и т.д.)
+        channel_id: Новый ID канала (числовой, например '-100...')
+        link: Ссылка на канал (опционально)
+
+    Returns:
+        True если обновлено успешно
+    """
+    if specialty not in SPECIALTY_MAP:
+        return False
+
+    # Обновляем в памяти
+    SPECIALTY_MAP[specialty]["channel"] = str(channel_id)
+    if link:
+        SPECIALTY_MAP[specialty]["link"] = link
+
+    # Сохраняем на диск
+    try:
+        overrides = {}
+        if os.path.exists(CHANNEL_OVERRIDES_PATH):
+            with open(CHANNEL_OVERRIDES_PATH, "r", encoding="utf-8") as f:
+                overrides = json.load(f)
+
+        overrides[specialty] = {
+            "channel": str(channel_id),
+            "link": link or SPECIALTY_MAP[specialty]["link"],
+            "name": SPECIALTY_MAP[specialty]["name"]
+        }
+
+        os.makedirs(os.path.dirname(CHANNEL_OVERRIDES_PATH), exist_ok=True)
+        with open(CHANNEL_OVERRIDES_PATH, "w", encoding="utf-8") as f:
+            json.dump(overrides, f, ensure_ascii=False, indent=2)
+
+        logger.info(f"✅ Канал для {SPECIALTY_MAP[specialty]['name']} обновлён: {channel_id}")
+        return True
+
+    except Exception as e:
+        logger.error(f"Ошибка сохранения channel_overrides: {e}")
+        return True  # В памяти обновлено, просто не сохранилось
+
+
+# Загружаем привязки при импорте модуля
+_load_channel_overrides()
 
 
 def get_specialty_config(specialty: str) -> Optional[Dict]:
@@ -131,5 +213,6 @@ __all__ = [
     "get_specialty_prompt",
     "get_all_specialties",
     "get_specialty_by_channel",
-    "get_channel_by_specialty"
+    "get_channel_by_specialty",
+    "update_channel_for_specialty"
 ]

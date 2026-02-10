@@ -470,6 +470,10 @@ class AutoPublisher:
                 callback_data=f"ap_edit_{pending.plan_id}"
             )],
             [InlineKeyboardButton(
+                text="⏰ Изменить время публикации",
+                callback_data=f"ap_time_{pending.plan_id}"
+            )],
+            [InlineKeyboardButton(
                 text="🗑️ Удалить пост из плана",
                 callback_data=f"ap_remove_{pending.plan_id}"
             )],

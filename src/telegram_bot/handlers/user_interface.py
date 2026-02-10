@@ -12,7 +12,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import StatesGroup, State
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, Message, CallbackQuery
 
-from src.agents.specialty_loader import SPECIALTY_MAP, get_specialty_config
+from src.agents.specialty_loader import SPECIALTY_MAP, get_specialty_config, update_channel_for_specialty
 # Импорты ваших сервисов
 from src.services.content_generator import ContentGeneratorService
 from src.services.validator import PostValidator, logger
@@ -35,6 +35,7 @@ class AutoPubReview(StatesGroup):
     """FSM для review автопубликации"""
     waiting_for_post_number = State()    # Ожидание номера поста (для edit/remove/view)
     waiting_for_comment = State()        # Ожидание комментария к посту
+    waiting_for_time = State()           # Ожидание нового времени публикации
 
 
 # Глобальные переменные (в production используйте dependency injection)
@@ -1072,18 +1073,87 @@ async def cmd_resolve_channels(message: Message):
 
 @router.message(F.forward_from_chat)
 async def handle_forwarded_from_channel(message: Message):
-    """Обработка пересланного сообщения из канала — показывает ID"""
+    """Обработка пересланного сообщения из канала — показывает ID и предлагает привязку"""
     chat = message.forward_from_chat
     if chat.type in ("channel", "supergroup"):
+        # Проверяем, привязан ли уже этот канал
+        current_specialty = None
+        for spec, cfg in SPECIALTY_MAP.items():
+            if str(cfg["channel"]) == str(chat.id):
+                current_specialty = spec
+                break
+
+        status = ""
+        if current_specialty:
+            cfg = SPECIALTY_MAP[current_specialty]
+            status = f"\n✅ <b>Привязан к:</b> {cfg['emoji']} {cfg['name']}\n"
+
+        # Кнопки для привязки к специализации
+        buttons = []
+        for spec, cfg in SPECIALTY_MAP.items():
+            marker = " ✓" if spec == current_specialty else ""
+            buttons.append([InlineKeyboardButton(
+                text=f"{cfg['emoji']} {cfg['name']}{marker}",
+                callback_data=f"mapchan_{chat.id}_{cfg['channel_key']}"
+            )])
+
+        keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
+
         await message.answer(
-            f"📢 <b>Информация о канале</b>\n\n"
+            f"📢 <b>Канал найден</b>\n\n"
             f"<b>Название:</b> {html.escape(chat.title or 'N/A')}\n"
             f"🆔 <b>ID:</b> <code>{chat.id}</code>\n"
-            f"👤 <b>Username:</b> @{chat.username or 'нет'}\n\n"
-            f"Используйте этот ID в channels.json и specialty_loader.py:\n"
-            f"<code>\"channel\": \"{chat.id}\"</code>",
+            f"👤 <b>Username:</b> @{chat.username or 'нет'}\n"
+            f"{status}\n"
+            f"Выберите специализацию для привязки этого канала:",
+            parse_mode="HTML",
+            reply_markup=keyboard
+        )
+
+
+@router.callback_query(F.data.startswith("mapchan_"))
+async def handle_map_channel(callback: CallbackQuery):
+    """Привязка канала к специализации"""
+    parts = callback.data.split("_", 2)
+    if len(parts) < 3:
+        await callback.answer("Ошибка данных", show_alert=True)
+        return
+
+    channel_id = parts[1]
+    channel_key = parts[2]
+
+    # Находим специализацию по channel_key
+    target_specialty = None
+    for spec, cfg in SPECIALTY_MAP.items():
+        if cfg["channel_key"] == channel_key:
+            target_specialty = spec
+            break
+
+    if not target_specialty:
+        await callback.answer("Специализация не найдена", show_alert=True)
+        return
+
+    cfg = SPECIALTY_MAP[target_specialty]
+
+    # Обновляем привязку
+    success = update_channel_for_specialty(
+        target_specialty,
+        channel_id,
+        link=f"https://t.me/c/{channel_id[4:]}" if channel_id.startswith("-100") else None
+    )
+
+    if success:
+        await callback.message.edit_text(
+            f"✅ <b>Канал привязан!</b>\n\n"
+            f"{cfg['emoji']} <b>{cfg['name']}</b>\n"
+            f"🆔 ID: <code>{channel_id}</code>\n\n"
+            f"Теперь посты по специализации «{cfg['name']}» "
+            f"будут публиковаться в этот канал.",
             parse_mode="HTML"
         )
+        await callback.answer("Канал привязан!")
+    else:
+        await callback.answer("Ошибка привязки", show_alert=True)
 
 
 # ====================================================================================
@@ -1165,6 +1235,36 @@ async def handle_autopub_run_now(callback: CallbackQuery):
     # Запускаем в фоне
     import asyncio
     asyncio.create_task(auto_publisher.run_daily_cycle())
+
+
+def _build_approval_keyboard(pending) -> InlineKeyboardMarkup:
+    """Стандартная клавиатура одобрения плана"""
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(
+            text=f"✅ Одобрить все ({pending.total_active} постов)",
+            callback_data=f"ap_approve_{pending.plan_id}"
+        )],
+        [InlineKeyboardButton(
+            text="✏️ Дать комментарий к посту",
+            callback_data=f"ap_edit_{pending.plan_id}"
+        )],
+        [InlineKeyboardButton(
+            text="⏰ Изменить время публикации",
+            callback_data=f"ap_time_{pending.plan_id}"
+        )],
+        [InlineKeyboardButton(
+            text="🗑️ Удалить пост из плана",
+            callback_data=f"ap_remove_{pending.plan_id}"
+        )],
+        [InlineKeyboardButton(
+            text="👁️ Посмотреть пост целиком",
+            callback_data=f"ap_view_{pending.plan_id}"
+        )],
+        [InlineKeyboardButton(
+            text="❌ Отменить весь план",
+            callback_data=f"ap_cancel_{pending.plan_id}"
+        )]
+    ])
 
 
 # --- Одобрение плана ---
@@ -1304,29 +1404,7 @@ async def handle_ap_edit_comment(message: Message, state: FSMContext):
             pass
 
         feed_text = auto_publisher._build_feed_text(pending)
-
-        keyboard = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(
-                text=f"✅ Одобрить все ({pending.total_active} постов)",
-                callback_data=f"ap_approve_{pending.plan_id}"
-            )],
-            [InlineKeyboardButton(
-                text="✏️ Дать комментарий к посту",
-                callback_data=f"ap_edit_{pending.plan_id}"
-            )],
-            [InlineKeyboardButton(
-                text="🗑️ Удалить пост из плана",
-                callback_data=f"ap_remove_{pending.plan_id}"
-            )],
-            [InlineKeyboardButton(
-                text="👁️ Посмотреть пост целиком",
-                callback_data=f"ap_view_{pending.plan_id}"
-            )],
-            [InlineKeyboardButton(
-                text="❌ Отменить весь план",
-                callback_data=f"ap_cancel_{pending.plan_id}"
-            )]
-        ])
+        keyboard = _build_approval_keyboard(pending)
 
         try:
             await message.answer(
@@ -1345,6 +1423,145 @@ async def handle_ap_edit_comment(message: Message, state: FSMContext):
             "❌ <b>Не удалось перегенерировать пост.</b>\n"
             "Попробуйте ещё раз через /autopublish",
             parse_mode="HTML"
+        )
+
+
+# --- Изменение времени публикации ---
+
+@router.callback_query(F.data.startswith("ap_time_"))
+async def handle_ap_time_start(callback: CallbackQuery):
+    """Начало изменения времени — выбор поста"""
+    plan_id = callback.data.replace("ap_time_", "")
+    admin_id = callback.from_user.id
+
+    pending = auto_publisher.pending_plans.get(admin_id)
+    if not pending or pending.plan_id != plan_id:
+        await callback.answer("Plan not found", show_alert=True)
+        return
+
+    active = pending.active_posts
+    if not active:
+        await callback.answer("Нет активных постов", show_alert=True)
+        return
+
+    buttons = []
+    for post in active:
+        zone_icons = {"green": "🟢", "yellow": "🟡", "red": "🔴"}
+        zone = zone_icons.get(post.safety_zone, "⚪")
+        btn_text = f"⏰ #{post.index + 1} {post.publish_time} {zone} {post.channel_emoji} {post.topic[:20]}"
+        buttons.append([InlineKeyboardButton(
+            text=btn_text,
+            callback_data=f"ap_timepost_{plan_id}_{post.index}"
+        )])
+    buttons.append([InlineKeyboardButton(text="◀️ Назад к плану", callback_data=f"ap_back_{plan_id}")])
+
+    keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
+
+    await callback.message.edit_text(
+        "⏰ <b>Изменить время публикации</b>\n\n"
+        "Выберите пост, для которого хотите изменить время:",
+        parse_mode="HTML",
+        reply_markup=keyboard
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data.regexp(r"^ap_timepost_[a-f0-9]+_\d+$"))
+async def handle_ap_time_post_selected(callback: CallbackQuery, state: FSMContext):
+    """Пост выбран — запрос нового времени"""
+    parts = callback.data.split("_")
+    plan_id = parts[2]
+    post_index = int(parts[3])
+    admin_id = callback.from_user.id
+
+    pending = auto_publisher.pending_plans.get(admin_id)
+    if not pending or pending.plan_id != plan_id:
+        await callback.answer("Plan not found", show_alert=True)
+        return
+
+    if post_index >= len(pending.posts) or pending.posts[post_index].removed:
+        await callback.answer("Пост не найден", show_alert=True)
+        return
+
+    post = pending.posts[post_index]
+
+    await state.update_data(ap_plan_id=plan_id, ap_post_index=post_index)
+    await state.set_state(AutoPubReview.waiting_for_time)
+
+    await callback.message.edit_text(
+        f"⏰ <b>Изменение времени для поста #{post.index + 1}</b>\n\n"
+        f"{post.channel_emoji} <b>{post.channel_name}</b>\n"
+        f"📌 {html.escape(post.topic)}\n"
+        f"Текущее время: <b>{post.publish_time}</b>\n\n"
+        f"Введите новое время в формате <b>ЧЧ:ММ</b>\n"
+        f"<i>Например: 09:00, 14:30, 20:00</i>",
+        parse_mode="HTML"
+    )
+    await callback.answer()
+
+
+@router.message(AutoPubReview.waiting_for_time)
+async def handle_ap_time_input(message: Message, state: FSMContext):
+    """Получено новое время — обновление поста"""
+    data = await state.get_data()
+    plan_id = data.get("ap_plan_id")
+    post_index = data.get("ap_post_index")
+    admin_id = message.from_user.id
+    time_text = message.text.strip()
+
+    await state.clear()
+
+    # Валидация формата времени
+    import re
+    match = re.match(r'^(\d{1,2}):(\d{2})$', time_text)
+    if not match:
+        await message.answer(
+            "❌ Неверный формат времени. Используйте <b>ЧЧ:ММ</b> (например 09:00)\n"
+            "Попробуйте снова через ⏰ Изменить время",
+            parse_mode="HTML"
+        )
+        return
+
+    hour, minute = int(match.group(1)), int(match.group(2))
+    if hour > 23 or minute > 59:
+        await message.answer(
+            "❌ Некорректное время. Часы: 0-23, минуты: 0-59.\n"
+            "Попробуйте снова через ⏰ Изменить время",
+            parse_mode="HTML"
+        )
+        return
+
+    new_time = f"{hour:02d}:{minute:02d}"
+
+    pending = auto_publisher.pending_plans.get(admin_id)
+    if not pending or pending.plan_id != plan_id:
+        await message.answer("❌ План не найден или устарел")
+        return
+
+    if post_index >= len(pending.posts) or pending.posts[post_index].removed:
+        await message.answer("❌ Пост не найден")
+        return
+
+    post = pending.posts[post_index]
+    old_time = post.publish_time
+    post.publish_time = new_time
+
+    feed_text = auto_publisher._build_feed_text(pending)
+    keyboard = _build_approval_keyboard(pending)
+
+    try:
+        await message.answer(
+            f"✅ <b>Время поста #{post.index + 1} изменено: {old_time} → {new_time}</b>\n\n"
+            + feed_text,
+            parse_mode="HTML",
+            reply_markup=keyboard
+        )
+    except Exception as e:
+        logger.warning(f"Ошибка HTML после смены времени: {e}")
+        await message.answer(
+            f"Время поста #{post.index + 1} изменено: {old_time} → {new_time}\n\n"
+            + html.escape(feed_text),
+            reply_markup=keyboard
         )
 
 
@@ -1561,29 +1778,7 @@ async def handle_ap_back(callback: CallbackQuery):
 async def _refresh_feed(callback: CallbackQuery, pending):
     """Обновляет сообщение с лентой плана"""
     feed_text = auto_publisher._build_feed_text(pending)
-
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(
-            text=f"✅ Одобрить все ({pending.total_active} постов)",
-            callback_data=f"ap_approve_{pending.plan_id}"
-        )],
-        [InlineKeyboardButton(
-            text="✏️ Дать комментарий к посту",
-            callback_data=f"ap_edit_{pending.plan_id}"
-        )],
-        [InlineKeyboardButton(
-            text="🗑️ Удалить пост из плана",
-            callback_data=f"ap_remove_{pending.plan_id}"
-        )],
-        [InlineKeyboardButton(
-            text="👁️ Посмотреть пост целиком",
-            callback_data=f"ap_view_{pending.plan_id}"
-        )],
-        [InlineKeyboardButton(
-            text="❌ Отменить весь план",
-            callback_data=f"ap_cancel_{pending.plan_id}"
-        )]
-    ])
+    keyboard = _build_approval_keyboard(pending)
 
     try:
         await callback.message.edit_text(feed_text, parse_mode="HTML", reply_markup=keyboard)
