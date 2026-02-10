@@ -35,14 +35,16 @@ class PostCreation(StatesGroup):
 generator_agent = None  # Инициализируется в main.py
 safety_agent = None
 telegram_bot = None
+auto_publisher = None
 
 
-def set_agents(gen_agent, safe_agent, tg_bot):
+def set_agents(gen_agent, safe_agent, tg_bot, auto_pub=None):
     """Инициализация агентов из main.py"""
-    global generator_agent, safety_agent, telegram_bot
+    global generator_agent, safety_agent, telegram_bot, auto_publisher
     generator_agent = gen_agent
     safety_agent = safe_agent
     telegram_bot = tg_bot
+    auto_publisher = auto_pub
 
 
 # ====================================================================================
@@ -54,10 +56,11 @@ async def cmd_start(message: Message):
     """Стартовое меню с красивым дизайном"""
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="✨ Создать новый пост", callback_data="new_post")],
+        [InlineKeyboardButton(text="🤖 Автопубликация", callback_data="autopub_menu")],
         [InlineKeyboardButton(text="📋 Мои запланированные посты", callback_data="my_posts")],
         [InlineKeyboardButton(text="📊 Статистика", callback_data="stats")],
     ])
-    
+
     await message.answer(
         "🤖 <b>AI Medical Content Bot</b>\n\n"
         "Автоматическая генерация медицинского контента\n"
@@ -797,6 +800,7 @@ async def handle_back_to_menu(callback: CallbackQuery):
     """Возврат в главное меню"""
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="✨ Создать новый пост", callback_data="new_post")],
+        [InlineKeyboardButton(text="🤖 Автопубликация", callback_data="autopub_menu")],
         [InlineKeyboardButton(text="📋 Мои запланированные посты", callback_data="my_posts")],
         [InlineKeyboardButton(text="📊 Статистика", callback_data="stats")],
     ])
@@ -807,6 +811,45 @@ async def handle_back_to_menu(callback: CallbackQuery):
         parse_mode="HTML",
         reply_markup=keyboard
     )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "autopub_menu")
+async def handle_autopub_menu(callback: CallbackQuery):
+    """Обработка кнопки автопубликации из меню"""
+    if not auto_publisher:
+        await callback.answer("❌ AutoPublisher не инициализирован", show_alert=True)
+        return
+
+    ap_stats = auto_publisher.get_stats()
+    status_emoji = "▶️" if ap_stats["enabled"] else "⏸️"
+    status_text = "ВКЛЮЧЕНА" if ap_stats["enabled"] else "ВЫКЛЮЧЕНА"
+
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(
+            text="⏸️ Выключить" if ap_stats["enabled"] else "▶️ Включить",
+            callback_data="autopub_toggle"
+        )],
+        [InlineKeyboardButton(text="🚀 Запустить сейчас", callback_data="autopub_run_now")],
+        [InlineKeyboardButton(text="◀️ Главное меню", callback_data="back_to_menu")]
+    ])
+
+    text = (
+        f"🤖 <b>Автопубликация</b> {status_emoji} {status_text}\n\n"
+        f"AI-планировщик автоматически:\n"
+        f"• Выбирает темы для постов\n"
+        f"• Определяет оптимальное время\n"
+        f"• Генерирует контент\n"
+        f"• Проверяет безопасность\n"
+        f"• Публикует в каналы\n\n"
+        f"📊 <b>Статистика:</b>\n"
+        f"• Запусков: {ap_stats['total_runs']}\n"
+        f"• Опубликовано: {ap_stats['total_published']}\n"
+        f"• Ошибки: {ap_stats['total_failed']}\n\n"
+        f"⏰ Последний запуск: {ap_stats['last_run']}"
+    )
+
+    await callback.message.edit_text(text, parse_mode="HTML", reply_markup=keyboard)
     await callback.answer()
 
 
@@ -916,6 +959,118 @@ async def handle_regenerate(callback: CallbackQuery, state: FSMContext):
     )
     # Повторяем генерацию (логика из process_topic_and_generate)
     await callback.answer()
+
+
+# ====================================================================================
+# АВТОПУБЛИКАЦИЯ - УПРАВЛЕНИЕ
+# ====================================================================================
+
+@router.message(Command("autopublish"))
+async def cmd_autopublish(message: Message):
+    """Команда /autopublish - управление автоматической публикацией"""
+    if not auto_publisher:
+        await message.answer(
+            "❌ <b>AutoPublisher не инициализирован</b>",
+            parse_mode="HTML"
+        )
+        return
+
+    ap_stats = auto_publisher.get_stats()
+    status_emoji = "▶️" if ap_stats["enabled"] else "⏸️"
+    status_text = "ВКЛЮЧЕНА" if ap_stats["enabled"] else "ВЫКЛЮЧЕНА"
+
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(
+            text="⏸️ Выключить" if ap_stats["enabled"] else "▶️ Включить",
+            callback_data="autopub_toggle"
+        )],
+        [InlineKeyboardButton(text="🚀 Запустить сейчас", callback_data="autopub_run_now")],
+        [InlineKeyboardButton(text="◀️ Главное меню", callback_data="back_to_menu")]
+    ])
+
+    text = (
+        f"🤖 <b>Автопубликация</b> {status_emoji} {status_text}\n\n"
+        f"📊 <b>Статистика:</b>\n"
+        f"• Запусков: {ap_stats['total_runs']}\n"
+        f"• Запланировано: {ap_stats['total_planned']}\n"
+        f"• Сгенерировано: {ap_stats['total_generated']}\n"
+        f"• Опубликовано: {ap_stats['total_published']}\n"
+        f"• Отклонено (безопасность): {ap_stats['total_safety_rejected']}\n"
+        f"• Ошибки: {ap_stats['total_failed']}\n\n"
+        f"⏰ Последний запуск: {ap_stats['last_run']}\n"
+        f"📋 Постов в последнем плане: {ap_stats['last_plan_posts']}"
+    )
+
+    await message.answer(text, parse_mode="HTML", reply_markup=keyboard)
+
+
+@router.callback_query(F.data == "autopub_toggle")
+async def handle_autopub_toggle(callback: CallbackQuery):
+    """Вкл/выкл автопубликации"""
+    if not auto_publisher:
+        await callback.answer("❌ AutoPublisher не инициализирован", show_alert=True)
+        return
+
+    if auto_publisher.enabled:
+        auto_publisher.disable()
+        await callback.answer("⏸️ Автопубликация выключена")
+    else:
+        auto_publisher.enable()
+        await callback.answer("▶️ Автопубликация включена")
+
+    # Обновляем сообщение
+    ap_stats = auto_publisher.get_stats()
+    status_emoji = "▶️" if ap_stats["enabled"] else "⏸️"
+    status_text = "ВКЛЮЧЕНА" if ap_stats["enabled"] else "ВЫКЛЮЧЕНА"
+
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(
+            text="⏸️ Выключить" if ap_stats["enabled"] else "▶️ Включить",
+            callback_data="autopub_toggle"
+        )],
+        [InlineKeyboardButton(text="🚀 Запустить сейчас", callback_data="autopub_run_now")],
+        [InlineKeyboardButton(text="◀️ Главное меню", callback_data="back_to_menu")]
+    ])
+
+    text = (
+        f"🤖 <b>Автопубликация</b> {status_emoji} {status_text}\n\n"
+        f"📊 <b>Статистика:</b>\n"
+        f"• Запусков: {ap_stats['total_runs']}\n"
+        f"• Запланировано: {ap_stats['total_planned']}\n"
+        f"• Сгенерировано: {ap_stats['total_generated']}\n"
+        f"• Опубликовано: {ap_stats['total_published']}\n"
+        f"• Отклонено (безопасность): {ap_stats['total_safety_rejected']}\n"
+        f"• Ошибки: {ap_stats['total_failed']}\n\n"
+        f"⏰ Последний запуск: {ap_stats['last_run']}\n"
+        f"📋 Постов в последнем плане: {ap_stats['last_plan_posts']}"
+    )
+
+    try:
+        await callback.message.edit_text(text, parse_mode="HTML", reply_markup=keyboard)
+    except Exception:
+        pass
+
+
+@router.callback_query(F.data == "autopub_run_now")
+async def handle_autopub_run_now(callback: CallbackQuery):
+    """Запуск автопубликации вручную прямо сейчас"""
+    if not auto_publisher:
+        await callback.answer("❌ AutoPublisher не инициализирован", show_alert=True)
+        return
+
+    await callback.answer("🚀 Запускаю автопубликацию...")
+
+    await callback.message.edit_text(
+        "🤖 <b>Автопубликация запущена!</b>\n\n"
+        "⏳ AI-планировщик составляет план...\n"
+        "Генерация и публикация выполняются в фоне.\n\n"
+        "Вы получите уведомление по завершении.",
+        parse_mode="HTML"
+    )
+
+    # Запускаем в фоне, чтобы не блокировать ответ пользователю
+    import asyncio
+    asyncio.create_task(auto_publisher.run_daily_cycle())
 
 
 # ====================================================================================

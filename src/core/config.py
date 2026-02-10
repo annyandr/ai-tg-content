@@ -41,6 +41,12 @@ class Config:
     POSTING_TIMES = os.getenv("POSTING_TIMES", "09:00,20:00").split(",")
     TIMEZONE = os.getenv("TIMEZONE", "Europe/Moscow")
     
+    # Auto-publishing
+    AUTO_PUBLISH_ENABLED = os.getenv("AUTO_PUBLISH_ENABLED", "true").lower() == "true"
+    AUTO_PUBLISH_TIME = os.getenv("AUTO_PUBLISH_TIME", "07:00")  # Время запуска планирования
+    AUTO_PUBLISH_MIN_POSTS = int(os.getenv("AUTO_PUBLISH_MIN_POSTS", "1"))
+    AUTO_PUBLISH_MAX_POSTS = int(os.getenv("AUTO_PUBLISH_MAX_POSTS", "3"))
+
     # Channels configuration
     CHANNELS_CONFIG_PATH = "./data/channels.json"
     

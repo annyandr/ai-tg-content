@@ -15,15 +15,17 @@ class SchedulerTasks:
     """
     Класс с задачами для планировщика
     """
-    
-    def __init__(self, telegram_bot, task_queue: Optional[TaskQueue] = None):
+
+    def __init__(self, telegram_bot, task_queue: Optional[TaskQueue] = None, auto_publisher=None):
         """
         Args:
             telegram_bot: Экземпляр MedicalTelegramBot
             task_queue: Очередь задач (опционально)
+            auto_publisher: Экземпляр AutoPublisher (опционально)
         """
         self.telegram_bot = telegram_bot
         self.task_queue = task_queue or TaskQueue()
+        self.auto_publisher = auto_publisher
     
     async def publish_scheduled_posts(self):
         """
@@ -151,6 +153,23 @@ class SchedulerTasks:
         except Exception as e:
             logger.error(f"❌ Ошибка очистки: {e}")
     
+    async def auto_publish(self):
+        """
+        Автоматическая генерация и публикация постов.
+        AI-планировщик определяет темы, время и количество постов.
+        Вызывается ежедневно по расписанию.
+        """
+        logger.info("🤖 Запуск автоматической публикации...")
+
+        if not self.auto_publisher:
+            logger.warning("⚠️ AutoPublisher не инициализирован")
+            return
+
+        try:
+            await self.auto_publisher.run_daily_cycle()
+        except Exception as e:
+            logger.error(f"Ошибка автопубликации: {e}", exc_info=True)
+
     async def health_check(self):
         """
         Проверка работоспособности системы
