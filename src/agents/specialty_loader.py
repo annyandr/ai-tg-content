@@ -22,7 +22,7 @@ SPECIALTY_MAP: Dict[str, Dict] = {
         "prompt": GYNECOLOGY_SPECIALTY_PROMPT,
         "emoji": "🍑",
         "channel": "-1003748097480",
-        "link": "https://t.me/profgynecologist",
+        "link": "https://t.me/+qwgGe06ngOZmNDYy",
         "name": "Гинекология",
         "channel_key": "gynecology"
     },
@@ -30,31 +30,31 @@ SPECIALTY_MAP: Dict[str, Dict] = {
         "prompt": PEDIATRICS_SPECIALTY_PROMPT,
         "emoji": "👶",
         "channel": "-1003711554131",
-        "link": "https://t.me/profpediatrician",
+        "link": "https://t.me/+xTeUs-xsnsBhNjNi",
         "name": "Педиатрия",
         "channel_key": "pediatrics"
     },
     "эндокринология": {
         "prompt": ENDOCRINOLOGY_SPECIALTY_PROMPT,
         "emoji": "🩺",
-        "channel": "profendocrinologist",
-        "link": "https://t.me/profendocrinologist",
+        "channel": "-1003211249230",
+        "link": "https://t.me/+UPBs4DiF_UNlNmVi",
         "name": "Эндокринология",
         "channel_key": "endocrinology"
     },
     "терапия": {
         "prompt": THERAPY_SPECIALTY_PROMPT,
         "emoji": "🫀",
-        "channel": "profphysician",
-        "link": "https://t.me/profphysician",
+        "channel": "-1003894685518",
+        "link": "https://t.me/+PRrE2LC-CsQ3YWJi",
         "name": "Терапия",
         "channel_key": "therapy"
     },
     "дерматология": {
         "prompt": DERMATOLOGY_SPECIALTY_PROMPT,
         "emoji": "🧴",
-        "channel": "profdermatologists",
-        "link": "https://t.me/profdermatologists",
+        "channel": "-1003873544106",
+        "link": "https://t.me/+FEbxZqjz2BFhMjli",
         "name": "Дерматология",
         "channel_key": "dermatology"
     }

@@ -14,21 +14,21 @@
     "invite_link": "https://t.me/+xTeUs-xsnsBhNjNi"
   },
   {
-    "id": "profendocrinologist",
+    "id": "-1003211249230",
     "name": "Эндокринология",
     "specialty": "endocrinology",
     "prompt_file": "endocrinology_prompts.py",
     "invite_link": "https://t.me/+UPBs4DiF_UNlNmVi"
   },
   {
-    "id": "profphysician",
+    "id": "-1003894685518",
     "name": "Терапия",
     "specialty": "therapy",
     "prompt_file": "therapy_prompts.py",
     "invite_link": "https://t.me/+PRrE2LC-CsQ3YWJi"
   },
   {
-    "id": "profdermatologists",
+    "id": "-1003873544106",
     "name": "Дерматология",
     "specialty": "dermatology",
     "prompt_file": "dermatology_prompts.py",
